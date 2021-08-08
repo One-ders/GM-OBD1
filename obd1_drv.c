@@ -45,8 +45,8 @@ static struct driver *leddrv;
 static struct driver *pindrv;
 static struct driver *timerdrv;
 
-#ifdef LED_AMBER
-unsigned int amber=LED_AMBER;
+#ifdef LED_GREEN
+unsigned int amber=LED_GREEN;
 #endif
 #ifdef LED_RED
 unsigned int red=LED_RED;

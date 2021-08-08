@@ -41,6 +41,7 @@
 #include "obd1_drv.h"
 
 
+#if 0
 static struct cmd cmds[] = {
 	{"help", generic_help_fnc},
 	{0,0}
@@ -50,6 +51,7 @@ static struct cmd_node cmn = {
 	"obd1",
 	cmds,
 };
+#endif
 
 #define RSP 0x01
 #define RP  0x04
@@ -59,6 +61,11 @@ static struct cmd_node cmn = {
 #define MV2_DIAG_FACTORY_TEST	0x08
 #define MV2_DIAG_DIAG_TEST	0x10
 #define MV2_DIAG_ALDL_TEST	0x20
+
+struct obd_data {
+	int fd_obd;
+	int fd_serial;
+};
 
 static void dump_data(const char *buf) {
 
@@ -110,19 +117,58 @@ static void dump_data(const char *buf) {
 	printf("Injector pulse %d.%d ms\n", buf[23], buf[24]);
 }
 
-void obd1_gw(void *dum) {
+int handle_serial_data(int fd, int event, void *uref) {
 	char buf[32];
+	int rc;
 
-	int fd=io_open(OBD_DRV0);
-	if (fd<0) {
+	printf("got event callback for serial data\n");
+	rc=io_read(fd,buf,sizeof(buf));
+	printf("hej, read returned %d\n",rc);
+	return 0;
+}
+
+
+int handle_obd_data(int fd, int event, void *uref) {
+	struct obd_data *obdd=(struct obd_data *)uref;
+	char buf[32];
+	int rc;
+
+	printf("got event callback for obd data\n");
+	rc=io_read(fd,buf,sizeof(buf));
+	printf("hej, read returned %d\n",rc);
+	dump_data(buf);
+	rc=io_write(obdd->fd_serial, buf, rc);
+	if (rc<0) {
+		printf("failed to write obd data to serial\n");
+	}
+	return 0;
+}
+
+static void obd1_gw(void *dum) {
+	struct obd_data obdd;
+	int fd_obd=io_open(OBD_DRV0);
+	int fd_serial=io_open("usb_serial0");
+	int rc;
+
+	if ((fd_obd<0)||(fd_serial<0)) {
+		printf("failed to open device\n");
 		return;
 	}
 
-	while(1) {
-		int rc=io_read(fd,buf,sizeof(buf));
+	memset(&obdd, 0, sizeof(obdd));
+	obdd.fd_obd=fd_obd;
+	obdd.fd_serial=fd_serial;
 
-		printf("hej, read returned %d\n",rc);
-		dump_data(buf);
+	rc=io_control(fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
+	if (rc<0) {
+		printf("failed to set serial port to nonblock\n");
+	}
+
+	register_event(fd_serial, EV_READ, handle_serial_data, &obdd);
+	register_event(fd_obd, EV_READ, handle_obd_data, &obdd);
+
+	while(1) {
+		do_event();
 	}
 }
 

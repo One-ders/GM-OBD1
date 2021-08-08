@@ -1,7 +1,6 @@
 
 #KREL=../../krel
-KREL=/home/anders/mips/qemu-jz/mycore/project/bl2/boards/MB997C
-#KREL=/home/anders/mips/qemu-jz/mycore/project/bl2/boards/MB1075B
+KREL=/home/anders/test1/nrepo/RTScheduler-Discovery/bl2/boards/MB997C
 
 ## application brings own driver, specify the make target in the
 ## macro below. The make file is expected to create a object file
@@ -27,8 +26,8 @@ my_drivers: $(LOBJ)/usr $(LOBJ)/usr/obd1_gw_drivers.o
 $(LOBJ)/usr:
 	mkdir -p $(LOBJ)/usr
 
-$(LOBJ)/usr/obd1_gw.o: $(LOBJ)/usr main.o
-	$(CC) -r -nostdlib -o $@ main.o
+$(LOBJ)/usr/obd1_gw.o: $(LOBJ)/usr main.o asynchio.o
+	$(CC) -r -nostdlib -o $@ main.o asynchio.o
 
 $(LOBJ)/usr/obd1_gw_drivers.o: obd1_drv.o
 	$(CC) -r -nostdlib -o $@ $^
