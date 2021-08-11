@@ -37,14 +37,17 @@
 #include "asynchio.h"
 
 #include <string.h>
+#include <ctype.h>
 
 #include "obd1_drv.h"
 
 static int set_run_mode(int argc, char **argv, struct Env *env);
+static int send_request(int argc, char **argv, struct Env *env);
 
 static struct cmd cmds[] = {
 	{"help", generic_help_fnc},
 	{"mode", set_run_mode},
+	{"sendreq", send_request},
 	{0,0}
 };
 
@@ -63,13 +66,151 @@ static struct cmd_node cmn = {
 #define MV2_DIAG_ALDL_TEST	0x20
 
 struct obd_data {
-	int fd_obd;
-	int fd_serial;
+	volatile int fd_obd;
+	volatile int fd_serial;
 };
 
 static struct obd_data obdd;
+static int obd8192_running=0;
 
-static void dump_data(const char *buf) {
+static int handle_timeout(int dumfd, int dumevent, void *uref) {
+	return 0;
+}
+
+static int obd8192_gw(struct Env *env);
+
+static void dump_bytes(void *buf, int size) {
+        int i;
+        char asc[32];
+        printf("=========================================================\n");
+        for (i=0;i<size;i++) {
+                if (!(i%16)) {
+                        printf("%08x: ", i);
+                }
+                printf("%02x", ((char *)buf)[i] & 0xff);
+                asc[i%16] = isprint(((char *)buf)[i])?((char *)buf)[i]:'.';
+                if (((i+1)%16)&&((i+1)<size)) {
+                        printf(",");
+                } else {
+                        if ((i+1)>=size) {
+                                int j;
+                                for(j=(i%16)+1;j<16;j++) {
+                                        printf("   ");
+                                        asc[j]=' ';
+                                }
+                        }
+                        printf(" ");
+                        asc[16]=0;
+                        printf(" :%s:\n",asc);
+                }
+
+        }
+        printf("=========================================================\n");
+}
+
+static int handle_serial_data(int fd, int event, void *uref) {
+	char buf[128];
+	int rc;
+
+	printf("got event callback for serial data\n");
+	rc=io_read(fd,buf,sizeof(buf));
+	printf("hej, read returned %d\n",rc);
+	dump_bytes(buf,rc);
+	if (!obd8192_running) {
+		obd8192_gw(0);
+		while(obdd.fd_obd!=0) sleep(1);
+	}
+	io_write(obdd.fd_obd, buf, rc);
+	return 0;
+}
+
+static int endit=0;
+static int send_req=0;
+//==============================================================================
+
+static void dump_data8192(const char *buf) {
+}
+
+static int handle_obd8192_data(int fd, int event, void *uref) {
+	struct obd_data *obdd=(struct obd_data *)uref;
+	char buf[128];
+	int dlen;
+	int rc;
+
+	printf("got event callback for obd data\n");
+	rc=io_read(fd,buf,sizeof(buf));
+	printf("hej, read returned %d\n",rc);
+	dlen=rc;
+//	dump_data8192(buf);
+	if (obdd->fd_serial) {
+		rc=io_write(obdd->fd_serial, buf, dlen);
+		if (rc<0) {
+			printf("failed to write obd data to serial\n");
+		}
+	}
+	return 0;
+}
+
+unsigned char mode10_packet[]={ 0x80, 0x56, 0x01, 0x29 };
+
+static void obd8192_gw_io(void *dum) {
+	int fd_obd=io_open("obd8192_0");
+	int rc;
+
+	if (fd_obd<0) {
+		printf("failed to open device\n");
+		return;
+	}
+
+	obdd.fd_obd=fd_obd;
+
+	printf("fd for obd driver %d\n", fd_obd);
+
+	register_event(fd_obd, EV_READ, handle_obd8192_data, &obdd);
+	register_timer(500, handle_timeout, 0);
+
+	while(1) {
+		do_event();
+		if (send_req) {
+			send_req=0;
+			rc=io_write(fd_obd, mode10_packet, sizeof(mode10_packet));
+		}
+		if (endit) {
+			break;
+		}
+	}
+	printf("leaving\n");
+	obd8192_running=0;
+	endit=0;
+}
+
+static void obd8192_gw_io(void *dum);
+
+static int obd8192_gw(struct Env *env) {
+	if (!obd8192_running) {
+		obd8192_running=1;
+		thread_create(obd8192_gw_io,0,0,1,"obd8192_gw");
+	}
+	return 0;
+}
+
+
+static int obd8192_gw_off(struct Env *env) {
+	int fd_obd=obdd.fd_obd;
+//	int fd_serial=obdd.fd_serial;
+
+	register_event(fd_obd, EV_READ, 0, 0);
+//	register_event(fd_serial, EV_READ, 0, 0);
+
+	io_close(fd_obd);
+//	io_close(fd_serial);
+	endit=1;
+	return 0;
+}
+
+//==============================================================================
+
+static void dump_data160(const char *buf) {
 
 	char *dm;
 	if (buf[0]&MV2_DIAG_FACTORY_TEST) {
@@ -119,22 +260,7 @@ static void dump_data(const char *buf) {
 	printf("Injector pulse %d.%d ms\n", buf[23], buf[24]);
 }
 
-static int handle_timeout(int dumfd, int dumevent, void *uref) {
-	return 0;
-}
-
-static int handle_serial_data(int fd, int event, void *uref) {
-	char buf[32];
-	int rc;
-
-	printf("got event callback for serial data\n");
-	rc=io_read(fd,buf,sizeof(buf));
-	printf("hej, read returned %d\n",rc);
-	return 0;
-}
-
-
-static int handle_obd_data(int fd, int event, void *uref) {
+static int handle_obd160_data(int fd, int event, void *uref) {
 	struct obd_data *obdd=(struct obd_data *)uref;
 	char buf[32];
 	int dlen;
@@ -144,7 +270,7 @@ static int handle_obd_data(int fd, int event, void *uref) {
 	rc=io_read(fd,buf,sizeof(buf));
 	printf("hej, read returned %d\n",rc);
 	dlen=rc;
-	dump_data(buf);
+	dump_data160(buf);
 	rc=io_control(obdd->fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
 	if (rc<0) {
 		printf("failed to set serial port to nonblock\n");
@@ -157,77 +283,16 @@ static int handle_obd_data(int fd, int event, void *uref) {
 	return 0;
 }
 
-static void obd1_gw_io(void *dum);
-
-static int obd160_gw(struct Env *env) {
-	thread_create(obd1_gw_io,0,0,1,"obd1_gw");
-	return 0;
-}
-
-static int endit=0;
-
-static int obd160_gw_off(struct Env *env) {
-	int fd_obd=obdd.fd_obd;
-	int fd_serial=obdd.fd_serial;
-
-	register_event(fd_obd, EV_READ, 0, 0);
-	register_event(fd_serial, EV_READ, 0, 0);
-
-	io_close(fd_obd);
-	io_close(fd_serial);
-	endit=1;
-	return 0;
-}
-
-static int current_mode=0;
-static int set_run_mode(int argc, char **argv, struct Env *env) {
-	if (argc!=2) {
-		fprintf(env->io_fd, "need arg 160, 8192, or off\n");
-		return -1;
-	}
-
-	if (strcmp(argv[1],"160")==0) {
-		if (current_mode!=0) {
-			fprintf(env->io_fd,"stop current obd1 run first\n");
-			return -1;
-		}
-		current_mode=160;
-		if (obd160_gw(env)<0) {
-			current_mode=0;
-			fprintf(env->io_fd,"failed to start obd 160 stream\n");
-			return -1;
-		}
-	} else if (strcmp(argv[1],"8192")==0) {
-		if (current_mode!=0) {
-			fprintf(env->io_fd,"stop current obd1 run first\n");
-			return -1;
-		}
-	} else if (strcmp(argv[1],"off")==0) {
-		if (current_mode==0) {
-			fprintf(env->io_fd,"obd1 is not running\n");
-			return -1;
-		}
-		if (current_mode==160) {
-			obd160_gw_off(env);
-		}
-		current_mode=0;
-
-	} else {
-		fprintf(env->io_fd,"Bad argument: %s\n", argv[1]);
-		return -1;
-	}
-	return 0;
-}
-
-static void obd1_gw_io(void *dum) {
-	int fd_serial=io_open("usb_serial0");
+static void obd160_gw_io(void *dum) {
 	int fd_obd=io_open("obd160_0");
 	int rc;
 
+#if 0
 	if (fd_serial<0) {
 		printf("failed to open device\n");
 		return;
 	}
+#endif
 
 	if (fd_obd<0) {
 		printf("failed to open device\n");
@@ -235,18 +300,19 @@ static void obd1_gw_io(void *dum) {
 	}
 
 	obdd.fd_obd=fd_obd;
-	obdd.fd_serial=fd_serial;
+//	obdd.fd_serial=fd_serial;
 
-	printf("fd for obd driver %d, and for obd serial %d\n", fd_obd, fd_serial);
+	printf("fd for obd driver %d\n", fd_obd);
 
-
+#if 0
 	rc=io_control(fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
 	if (rc<0) {
 		printf("failed to set serial port to nonblock\n");
 	}
 
 	register_event(fd_serial, EV_READ, handle_serial_data, &obdd);
-	register_event(fd_obd, EV_READ, handle_obd_data, &obdd);
+#endif
+	register_event(fd_obd, EV_READ, handle_obd160_data, &obdd);
 	register_timer(500, handle_timeout, 0);
 
 
@@ -260,10 +326,123 @@ static void obd1_gw_io(void *dum) {
 	endit=0;
 }
 
+static void obd160_gw_io(void *dum);
+
+static int obd160_gw(struct Env *env) {
+	thread_create(obd160_gw_io,0,0,1,"obd160_gw");
+	return 0;
+}
+
+static int obd160_gw_off(struct Env *env) {
+	int fd_obd=obdd.fd_obd;
+//	int fd_serial=obdd.fd_serial;
+
+	register_event(fd_obd, EV_READ, 0, 0);
+//	register_event(fd_serial, EV_READ, 0, 0);
+
+	io_close(fd_obd);
+//	io_close(fd_serial);
+	endit=1;
+	return 0;
+}
+
+//========================================================================================
+
+static int current_mode=0;
+static int send_request(int argc, char **argv, struct Env *env) {
+	send_req=1;
+	return 0;
+}
+
+
+
+static int set_run_mode(int argc, char **argv, struct Env *env) {
+	if (argc!=2) {
+		fprintf(env->io_fd, "need arg 160, 8192, or off\n");
+		return -1;
+	}
+
+	if (strcmp(argv[1],"160")==0) {
+		if (current_mode!=0) {
+			fprintf(env->io_fd,"stop current obd1 run first\n");
+			return -1;
+		}
+		if (obd160_gw(env)<0) {
+			current_mode=0;
+			fprintf(env->io_fd,"failed to start obd 160 stream\n");
+			return -1;
+		}
+		current_mode=160;
+	} else if (strcmp(argv[1],"8192")==0) {
+		if (current_mode!=0) {
+			fprintf(env->io_fd,"stop current obd1 run first\n");
+			return -1;
+		}
+		if (obd8192_gw(env)<0) {
+			current_mode=0;
+			fprintf(env->io_fd,"failed to start obd 160 stream\n");
+			return -1;
+		}
+		current_mode=8192;
+	} else if (strcmp(argv[1],"off")==0) {
+		if (current_mode==0) {
+			fprintf(env->io_fd,"obd1 is not running\n");
+			return -1;
+		}
+		if (current_mode==160) {
+			obd160_gw_off(env);
+		} else if (current_mode==8192) {
+			obd8192_gw_off(env);
+		}
+		current_mode=0;
+
+	} else {
+		fprintf(env->io_fd,"Bad argument: %s\n", argv[1]);
+		return -1;
+	}
+	return 0;
+}
+
+static void obd1_serial_mon(void *dum) {
+	int fd_serial=io_open("usb_serial0");
+	int rc;
+
+	if (fd_serial<0) {
+		printf("failed to open device\n");
+		return;
+	}
+
+	obdd.fd_serial=fd_serial;
+
+	printf("fd for obd serial %d\n", fd_serial);
+
+	rc=io_control(fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
+	if (rc<0) {
+		printf("failed to set serial port to nonblock\n");
+	}
+
+	register_event(fd_serial, EV_READ, handle_serial_data, &obdd);
+
+	while(1) {
+		do_event();
+#if 0
+		if (endit) {
+			break;
+		}
+#endif
+	}
+	printf("leaving\n");
+	endit=0;
+}
+
 
 //int main(void) {
 int init_pkg(void) {
-//	thread_create(obd1_gw_io,0,0,1,"obd1_gw");
+	char *bub[]={"mode", "160"};
+	struct Env fenv;
+	thread_create(obd1_serial_mon,0,0,1,"obd1_serial_mon");
+	fenv.io_fd=0;
+	set_run_mode(2, bub, &fenv);
 	install_cmd_node(&cmn, root_cmd_node);
 	/* create some jobs */
 	printf("back from thread create\n");
