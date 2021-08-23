@@ -1,7 +1,7 @@
 /* $OBD1_GW: main.c, v1.1 2014/04/07 21:44:00 anders Exp $ */
 
 /*
- * Copyright (c) 2014, Anders Franzen.
+ * Copyright (c) 2021, Anders Franzen.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,7 +39,23 @@
 #include <string.h>
 #include <ctype.h>
 
+#include "menu.h"
 #include "obd1_drv.h"
+
+typedef int (*Initf)(void);
+typedef int (*Updatef)(int fd, void *);
+
+struct pdata {
+        struct Panel *panel;
+        Initf   initf;
+        Updatef updatef;
+        struct pdata *next;
+};
+
+struct pdata *currentP;
+struct pdata pdata[4];
+
+extern unsigned int last_line, last_col;
 
 static int set_run_mode(int argc, char **argv, struct Env *env);
 static int send_request(int argc, char **argv, struct Env *env);
@@ -115,12 +131,20 @@ static int handle_serial_data(int fd, int event, void *uref) {
 	printf("got event callback for serial data\n");
 	rc=io_read(fd,buf,sizeof(buf));
 	printf("hej, read returned %d\n",rc);
+
+	currentP=currentP->next;
+	rc=io_control(obdd.fd_serial, F_SETFL, 0, 0);
+	currentP->initf();
+	draw_static_win(fd,currentP->panel);
+	rc=io_control(obdd.fd_serial, F_SETFL, (void *)O_NONBLOCK, 0);
+#if 0
 	dump_bytes(buf,rc);
 	if (!obd8192_running) {
 		obd8192_gw(0);
 		while(obdd.fd_obd!=0) sleep(1);
 	}
 	io_write(obdd.fd_obd, buf, rc);
+#endif
 	return 0;
 }
 
@@ -271,15 +295,23 @@ static int handle_obd160_data(int fd, int event, void *uref) {
 	printf("hej, read returned %d\n",rc);
 	dlen=rc;
 	dump_data160(buf);
+
+#if 1
+	rc=io_control(obdd->fd_serial, F_SETFL, 0, 0);
+	currentP->updatef(obdd->fd_serial,buf);
+	rc=io_control(obdd->fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
+#endif
+#if 0
 	rc=io_control(obdd->fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
 	if (rc<0) {
 		printf("failed to set serial port to nonblock\n");
 	} else {
 		rc=io_write(obdd->fd_serial, buf, dlen);
-		if (rc<0) {
-			printf("failed to write obd data to serial\n");
+		if (rc!=dlen) {
+			printf("failed to write %d bytes obd data to serial\n",rc);
 		}
 	}
+#endif
 	return 0;
 }
 
@@ -287,31 +319,45 @@ static void obd160_gw_io(void *dum) {
 	int fd_obd=io_open("obd160_0");
 	int rc;
 
-#if 0
-	if (fd_serial<0) {
-		printf("failed to open device\n");
-		return;
-	}
-#endif
-
 	if (fd_obd<0) {
 		printf("failed to open device\n");
 		return;
 	}
 
 	obdd.fd_obd=fd_obd;
-//	obdd.fd_serial=fd_serial;
 
-	printf("fd for obd driver %d\n", fd_obd);
+	currentP=&pdata[0];
 
-#if 0
-	rc=io_control(fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
-	if (rc<0) {
-		printf("failed to set serial port to nonblock\n");
-	}
+	pdata[0].panel=RawData;
+	pdata[0].initf=init_RawData;
+	pdata[0].updatef=update_RawData;
+	pdata[0].next=&pdata[1];
 
-	register_event(fd_serial, EV_READ, handle_serial_data, &obdd);
-#endif
+	pdata[1].panel=FlagData;
+	pdata[1].initf=init_FlagData;
+	pdata[1].updatef=update_FlagData;
+	pdata[1].next=&pdata[2];
+
+	pdata[2].panel=SensorData;
+	pdata[2].initf=init_SensorData;
+	pdata[2].updatef=update_SensorData;
+	pdata[2].next=&pdata[3];
+
+	pdata[3].panel=ErrorData;
+	pdata[3].initf=init_ErrorData;
+	pdata[3].updatef=update_ErrorData;
+	pdata[3].next=&pdata[0];
+
+
+	currentP->initf();
+	rc=io_control(obdd.fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
+//	rc=io_control(obdd.fd_serial, F_SETFL, 0, 0);
+	draw_static_win(obdd.fd_serial, currentP->panel);
+	set_cursor_position(obdd.fd_serial, last_line, 1);
+//	rc=io_control(obdd.fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
+
+	printf("usb serial set to non block\n");
+
 	register_event(fd_obd, EV_READ, handle_obd160_data, &obdd);
 	register_timer(500, handle_timeout, 0);
 
@@ -335,13 +381,10 @@ static int obd160_gw(struct Env *env) {
 
 static int obd160_gw_off(struct Env *env) {
 	int fd_obd=obdd.fd_obd;
-//	int fd_serial=obdd.fd_serial;
 
 	register_event(fd_obd, EV_READ, 0, 0);
-//	register_event(fd_serial, EV_READ, 0, 0);
 
 	io_close(fd_obd);
-//	io_close(fd_serial);
 	endit=1;
 	return 0;
 }
@@ -421,6 +464,7 @@ static void obd1_serial_mon(void *dum) {
 		printf("failed to set serial port to nonblock\n");
 	}
 
+	io_write(fd_serial, "hej hej\n", 8);
 	register_event(fd_serial, EV_READ, handle_serial_data, &obdd);
 
 	while(1) {

@@ -1,0 +1,108 @@
+
+
+	My		joby		dans		A028.ds
+0	MW2		MW2		MW2		MW2
+1	PROMIDA		PROMIDA		PROMIDA		PROMIDA
+2	PROMIDB		PROMIDB		PROMIDB		PROMIDB
+3	ISSPMP		IAC		ISSPMP		IACPMP
+4	COOLDEGA	CT		COOLDEGA	COOLANT TMP
+5	FILTMPH		MPH		FILTMPH		MPH
+6	EGRDC		MAP		EGRDC		EGRDC
+7	NTRPMX		RPM		NTRPMX		RPM
+8	ADTHROT		TPS		ADTHROT		THROTTLEP
+9	CORRCL		INT		CORRCL		BPCLCORR
+10	ADO2AF		O2		ADO2AF		OXYGEN SENS
+11	MALFFLG1	MALFFLG1	MALFFLG1	MALFFW1
+12	MALFFLG2	MALFFLG2	MALFFLG2	MALFFW2
+13	MALFFLG3	MALFFLG3	MALFFLG3	MALFFW3
+14	MALFFLG4	MWAF1		MALFFLG4	MALFFW4
+15	MWFA1		VOLT		MWFA1		AFMW
+16	MAT		MCU2IO		MAT		MAT
+17	MCUINST		KNOCK_CNT	MCUINST		MCUISW
+18	LV8		BLM		LV8		ESC Counter OLDPA3
+19	BLM		O2_CNT		BLM		BLM
+20	ALDLCNTR	-		ALDLCNTR	ALDL RICH LEAN counter
+21	DISPFLOW	-		DISPFLOW	AIR FLOW RATE (MSB)
+22	DISPFLOW1	-		DISPFLOW1	AIR FLOW RATE (LSB)
+23	OBPINJ		-		OBPINJ		INJ Base Pulse Width (M)
+24	OBPINJ1		-		OBPINJ1		INJ Base Pulse Width (L)
+
+
+MW2
+
+b0	RoadSpeedp	VSS pulse	RoadSpeedp	Overdrive on
+b1	Not Used	ESC 43B		Not used	MALF 14 or 15 at start
+b2	RefPulse	DRP Occurred	Ref Pulse o.	Ref pulse occured
+b3	FactoryDiag3k9  DiagMode 0ohm	FactoryDiag3k9	ALDL MODE 8192 mode 4
+b4	DiagPos 0 ohm	FactoryMode 3k9	DiagPos 0 ohm	Diag pos
+b5	DiagALDL 10K	ALDL mode 10k	DiagALDL 10K	Diag ALDL
+b6	HighBat.volt	Idle		HighBat.volt	High battery volt
+b7	AirMeterPulse	1stTimeidle	AirMeterPulse	Shift light
+
+
+MALFFLG1
+
+b0	24 vss		24		24		23 (MAT sens low)
+b1	23(mat sens lo)	23		23		22 (TPS LOW)
+b2	22(TPS LOW)	22		22		21 (TPS HI)
+b3	21(TPS HI)	15(CT low)	21		16 (Not used)
+b4	15(cst low)	21(TPS HI)	15		15 (CT sens low)
+b5	14(cst hi)	14(CST HI)	14		14 (CT sens hi)
+b6	13(O2s)		12(eng.norun)	13		13 (O sens open)
+b7	12(eng.norun)	13(O2s)		12		12 (eng.norun)
+
+MALFFLG2
+
+b0	42(EST merr)	42(EST)		42		35 (Not used)
+b1	41(cyl sel)	41(not used)	41		34 (MAF SENSE LO)
+b2	35(Not Used)	35(Not Used)	35		33 (MAF SENSE HI)
+b3	34(MAF LO)	33(MAP Hi)	34		32 (EGR DIAG)
+b4	33(MAF HI)	34(MAP Lo)	33		31 (Not used)
+b5	32(EGR DIAG)	32		32		26 (Not used)
+b6	31(Not Used)	25(MAT HI)	31		25 (MAT HI)
+b7	25(MAT Hi)	31(Governor err)25		24 (VSS)
+
+MALFFLG3
+
+b0	55(ADU err)	52(CAL Pack)	55		51(Prom err)
+b1	54(Fuel pump)	53(Not Used)	54		46(VATS err)
+b2	53(Over Volt)	54(FP relay err)53		45(O2 Rich)
+b3	52(Cal Pack)	51(Prom err)	52		44(O2 Lean)
+b4	51(Prom Err)	55(ADU err)	51		43(ESC Fail)
+b5	45(O2 Rich)	45(O2 Rich)	45		42(EST MON ERR)
+b6	44(O2 Lean)	43(Knck ESC)	44		41(Cyl sel)
+b7	43(ESC fail)	44(O2 Lean)	43		36(Burn off diag)
+
+MALFFLG4
+
+b0	63 Not Used	-		63		63
+b1	62 Not used	-		62		62
+b2	61 Not Used	-		61		61
+b3	55 Not Used	-		55		56
+b4	54(ADU err)	-		54		54
+b5	53(FP volt)	-		53		53
+b6	52(Over volt)	-		52		52
+b7	51(Cal packmis) -		51		51
+
+MWFA
+
+b0	FourthTPS !O/D ClearFlood	FourthTPS	Not Used
+b1	LearnEna	BLM Ena		LearnEna	Learn Ena
+b2	Bat.Lo		BatLo		BatLo		Not Used
+b3	PropStep	AsyncFule	PropStep	Not Used
+b4	VSS Fail	4-3Downshift	VSS Fail	VSS Fail
+b5	EECC slow O2	OldHigGear	EECC slow	EECC SLow o2
+b6	Rich/Lean	ClosedLoop	Rich/Lean	Rich-Lean
+b7	Closed loop	Rich Flag	Closed loop	Closed loop
+
+MCUINST
+
+b0	P/N		AIR divert	P/N		P/N
+b1	Cruising	Air Divert	Cruising	Not 3'd gear
+b2	O/D req		A/C Disable	TCC Locked	O/D REQ
+b3	Exc PS pressure TCC Locked	Exc PS Press	Not Used
+b4	100ms 4 gear	P/N		100ms 4 grear	EGR DIAG SW
+b5	!3Gear		No High Gear	!3Gear		TCC Locked
+b6	4gearswclosed	Not Used	4gearswclosed	Fan req
+b7	No AC Req	No AC req	No AC req	No AC req
+

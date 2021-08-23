@@ -26,8 +26,8 @@ my_drivers: $(LOBJ)/usr $(LOBJ)/usr/obd1_gw_drivers.o
 $(LOBJ)/usr:
 	mkdir -p $(LOBJ)/usr
 
-$(LOBJ)/usr/obd1_gw.o: $(LOBJ)/usr main.o asynchio.o
-	$(CC) -r -nostdlib -o $@ main.o asynchio.o
+$(LOBJ)/usr/obd1_gw.o: $(LOBJ)/usr main.o asynchio.o menu.o ./panellib/panel.o
+	$(CC) -r -nostdlib -o $@ main.o asynchio.o menu.o ./panellib/panel.o
 
 $(LOBJ)/usr/obd1_gw_drivers.o: obd1_drv.o
 	$(CC) -r -nostdlib -o $@ $^
@@ -41,5 +41,17 @@ main.o: main.c
 asynchio.o: asynchio.c asynchio.h
 	$(CC) $(CFLAGS_USR) -c -o $@ $<
 
+menu.o: menu.c
+	$(CC) $(CFLAGS_USR) -I./panellib -c -o $@ $<
+
+menu.c: menues.tpl
+	pcomp -o $(basename $@) $<
+
+panellib/panellib.a: panellib/panel.o
+
+panellib/panel.o: panellib/panel.c
+	$(CC) $(CFLAGS_USR) -I./panellib -c -o $@ $<
+
+
 clean:
-	rm -rf *.o obj myCore
+	rm -rf menu.c menu.h *.o obj myCore panellib/*.o
