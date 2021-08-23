@@ -15,7 +15,7 @@
 #include "panel.h"
 
 #define write io_write
-#define read io_write
+#define read io_read
 
 
 static int out_fd;
@@ -81,10 +81,13 @@ static int get_cursor_position(int fd, unsigned int *y, unsigned int *x) {
 }
 
 static int get_scrn_size(int fd, unsigned int *y, unsigned int *x) {
-//	set_cursor_position(fd,999,999);
-//	get_cursor_position(fd, y, x);
+#if 1
+	set_cursor_position(fd,999,999);
+	get_cursor_position(fd, y, x);
+#else
 	*y=40;
 	*x=132;
+#endif
 	return 0;
 }
 
@@ -138,7 +141,6 @@ int draw_static_win(int fd, struct Panel *p) {
 	int i;
 
 	printf("draw_static_win: fd=%d\n",fd);
-	io_write(fd,"draw_static_win:\n", 17);
 	out_fd=fd;
 	enable_raw_mode(fd);
 

@@ -464,7 +464,6 @@ static void obd1_serial_mon(void *dum) {
 		printf("failed to set serial port to nonblock\n");
 	}
 
-	io_write(fd_serial, "hej hej\n", 8);
 	register_event(fd_serial, EV_READ, handle_serial_data, &obdd);
 
 	while(1) {

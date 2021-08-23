@@ -26,7 +26,7 @@ my_drivers: $(LOBJ)/usr $(LOBJ)/usr/obd1_gw_drivers.o
 $(LOBJ)/usr:
 	mkdir -p $(LOBJ)/usr
 
-$(LOBJ)/usr/obd1_gw.o: $(LOBJ)/usr main.o asynchio.o menu.o ./panellib/panel.o
+$(LOBJ)/usr/obd1_gw.o: $(LOBJ)/usr menu.o main.o asynchio.o ./panellib/panel.o
 	$(CC) -r -nostdlib -o $@ main.o asynchio.o menu.o ./panellib/panel.o
 
 $(LOBJ)/usr/obd1_gw_drivers.o: obd1_drv.o
