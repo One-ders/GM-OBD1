@@ -193,7 +193,7 @@ static int pin_irq(struct device_handle *dh, int ev, void *dum) {
 
 	if (obd_comm_speed==160) {
 		int pin_stat;
-		int uSecSample=2000;
+		int uSecSample=2500;
 		struct obd160_data *obd=(struct obd160_data *)dum;
 		unsigned int left;
 
@@ -264,11 +264,9 @@ static int obd8192_timeout(struct device_handle *dh, int ev, void *dum) {
 			obd->tx_i++;
 			if (obd->tx_i>=obd->tx_len) {
 				obd->tx_run=2;
-				obd->rx_len=3;
-				sys_printf("done");
+				obd->rx_len=3;       // ???
 			} else {
 				obd->tx_char=(((~obd->tx_buf[obd->tx_i])&0xff)<<1)|1;
-				sys_printf("next_byte: %x\n", obd->tx_buf[obd->tx_i]);
 			}
 		} else {
 			obd->tx_char>>=1;
@@ -316,15 +314,16 @@ static int obd8192_timeout(struct device_handle *dh, int ev, void *dum) {
 			if (obd->rx_bcnt==2) {
 				obd->rx_len=(obd->rx_byte-0x55)+3;
 			}
-			sys_printf("got byte nr %d:  %x\n", obd->rx_bcnt, obd->rx_byte);
+//			sys_printf("got byte nr %d:  %x\n", obd->rx_bcnt, obd->rx_byte);
 			if (obd->rx_bcnt>=obd->rx_len) {
-				sys_printf("got complete msg\n");
+//				sys_printf("got complete msg\n");
 				obd->rx_bcnt=0;
 				obd->rx_len=2;
 				obd->rx_i++;
 				if ((obd->rx_i-obd->rx_o)>3) {
 					obd->rx_o=obd->rx_i-3;
 				}
+//				sys_printf("calling wakeup for 8192 usr\n");
 				wakeup_users8192(obd,EV_READ|EV_WRITE);
 			}
 		} else {
@@ -340,7 +339,7 @@ static int obd8192_timeout(struct device_handle *dh, int ev, void *dum) {
 static int obd160_timeout(struct device_handle *dh, int ev, void *dum) {
 	int pin_stat;
 	struct obd160_data *obd=(struct obd160_data *)dum;
-	unsigned int uSectout=6200-2000;
+	unsigned int uSectout=6200-2500;
 
 	if (obd->rx_bstate==RX_BIT_START) {
 		int bit;
@@ -425,7 +424,6 @@ static int obd8192_wrstr(struct obd8192_data *od, const unsigned char *buf, int 
 		od->tx_i=0;
 		od->tx_sent_bit=0;
 		od->tx_char=(((~od->tx_buf[0])&0xff)<<1)|1;    // add a 0 start bit and a 1 stopbit
-		sys_printf("first byte is %x, buf %x\n", od->tx_buf[0], buf[0]);
 
 		obd8192_startTx(od);
 		return len;

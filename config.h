@@ -3,4 +3,4 @@
 
 
 
-#define OBD1_PIN GPIO_PIN(PC,5)
+#define OBD1_PIN GPIO_PIN(GPIO_PC,5)

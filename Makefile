@@ -1,6 +1,6 @@
 
 #KREL=../../krel
-KREL=/home/anders/test1/nrepo/RTScheduler-Discovery/boards/MB997C
+KREL=../RTScheduler-Discovery/boards/MB997C
 
 ## application brings own driver, specify the make target in the
 ## macro below. The make file is expected to create a object file
@@ -45,7 +45,7 @@ menu.o: menu.c
 	$(CC) $(CFLAGS_USR) -I./panellib -c -o $@ $<
 
 menu.c: menues.tpl
-	pcomp -o $(basename $@) $<
+	pcomp -r -o $(basename $@) $<
 
 panellib/panellib.a: panellib/panel.o
 
