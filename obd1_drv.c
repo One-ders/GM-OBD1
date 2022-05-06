@@ -54,6 +54,9 @@ unsigned int green=LED_GREEN;
 #ifdef LED_RED
 unsigned int red=LED_RED;
 #endif
+#ifdef LED_BLUE
+unsigned int blue=LED_BLUE;
+#endif
 
 static int interframe_space;
 
@@ -252,10 +255,14 @@ static int obd8192_timeout(struct device_handle *dh, int ev, void *dum) {
 		// put out a bit
 		if (obd->tx_char&1) {
 			pindrv->ops->control(obd->pin_dh, GPIO_SINK_PIN,0,0);
+#ifdef LED_GREEN
 			leddrv->ops->control(obd->led_dh,LED_CTRL_ACTIVATE,&green,sizeof(green));
+#endif
 		} else {
 			pindrv->ops->control(obd->pin_dh, GPIO_RELEASE_PIN,0,0);
+#ifdef LED_GREEN
 			leddrv->ops->control(obd->led_dh,LED_CTRL_DEACTIVATE,&green,sizeof(green));
+#endif
 		}
 		timerdrv->ops->control(obd->timer_dh,HR_TIMER_SET,&bit_time,sizeof(bit_time));
 		obd->tx_sent_bit++;
@@ -359,7 +366,11 @@ static int obd160_timeout(struct device_handle *dh, int ev, void *dum) {
 			obd->bcnt=0;
 			obd->bnum=0;
 //			sys_printf("got sync\n");
+#ifdef LED_RED
 			leddrv->ops->control(obd->led_dh,LED_CTRL_DEACTIVATE,&red,sizeof(red));
+#elif defined(LED_BLUE)
+			leddrv->ops->control(obd->led_dh,LED_CTRL_DEACTIVATE,&blue,sizeof(blue));
+#endif
 		} else {
 			obd->byte=(obd->byte<<1)|bit;
 			obd->bcnt++;
@@ -375,7 +386,11 @@ static int obd160_timeout(struct device_handle *dh, int ev, void *dum) {
 						obd->o=obd->i-3;
 					}
 					wakeup_users160(obd,EV_READ|EV_WRITE);
+#ifdef LED_RED
 					leddrv->ops->control(obd->led_dh,LED_CTRL_ACTIVATE,&red,sizeof(red));
+#elif defined(LED_BLUE)
+					leddrv->ops->control(obd->led_dh,LED_CTRL_ACTIVATE,&blue,sizeof(blue));
+#endif
 				}
 			}
 		}

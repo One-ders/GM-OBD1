@@ -45,10 +45,16 @@ void enable_raw_mode(int fd) {
 }
 
 int set_cursor_position(int fd, unsigned int y, unsigned int x) {
+	int rc;
 	char buf[32];
 
 	sprintf(buf,"%c[%d;%dH",0x1b,y,x);
-	write(fd,buf,strlen(buf));
+	rc=write(fd,buf,strlen(buf));
+#if 0
+	if (rc!=strlen(buf)) {
+		printf("back from set cp: wrote %d, want %d\n", rc, strlen(buf));
+	}
+#endif
 	return 0;
 }
 
@@ -56,23 +62,54 @@ static int get_cursor_position(int fd, unsigned int *y, unsigned int *x) {
 	char buf[32];
 	int row=0;
 	int col=0;
+	int rc;
+	int cnt=0;
+	int pcnt=0;
 
 	sprintf(buf,"%c[6n",0x1b);
-	write(fd,buf,strlen(buf));
-
+	rc=write(fd,buf,strlen(buf));
+#if 0
+	if (rc!=strlen(buf)) {
+		printf("back from get cp: wrote %d, want %d\n", rc, strlen(buf));
+	}
+#endif
+	cnt=0;
 	read(fd,buf,2);
+	if (buf[0]!=0x1b) return -1;
+	if (buf[1]!='[') return -1;
 	while(1) {
 		int rc=read(fd,buf,1);
-		if (rc!=1) return -1;
-		if (buf[0]==';') break;
-		row=(row*10)+buf[0]-'0';
+		if (rc!=1) {
+			cnt++;
+			if (cnt>=1000) {
+				return -1;
+			}
+		} else {
+			cnt=0;
+		}
+		if (buf[0]>='0' && buf[0]<='9') {
+			row=(row*10)+buf[0]-'0';
+		} else if (buf[0]==';') {
+			break;
+		} else return -1;
 	}
 
+	cnt=0;
 	while(1) {
 		int rc=read(fd,buf,1);
-		if (rc!=1) return -1;
-		if (buf[0]=='R') break;
-		col=(col*10)+(buf[0]-'0');
+		if (rc!=1) {
+			cnt++;
+			if (cnt>=1000) {
+				return -1;
+			}
+		} else {
+			cnt=0;
+		}
+		if (buf[0]>='0' && buf[0]<='9') {
+			col=(col*10)+buf[0]-'0';
+		} else if (buf[0]=='R') {
+			break;
+		} else return -1;
 	}
 
 	*y=row;
@@ -81,20 +118,26 @@ static int get_cursor_position(int fd, unsigned int *y, unsigned int *x) {
 }
 
 static int get_scrn_size(int fd, unsigned int *y, unsigned int *x) {
-#if 1
+	int rc;
 	set_cursor_position(fd,999,999);
-	get_cursor_position(fd, y, x);
-#else
-	*y=40;
-	*x=132;
-#endif
+	rc=get_cursor_position(fd, y, x);
+	if (rc<0) {
+		*y=40;
+		*x=132;
+	}
 	return 0;
 }
 
 static int clr_scrn(int fd) {
+	int rc;
 	char buf[32];
 	sprintf(buf,"%c[2J",0x1b);
-	write(fd,buf,strlen(buf));
+	rc=write(fd,buf,strlen(buf));
+#if 0
+	if (rc!=strlen(buf)) {
+		printf("clr_scrn: write, wrote %d, wanted %d\n", rc, strlen(buf));
+	}
+#endif
 	return 0;
 }
 
@@ -140,19 +183,20 @@ int draw_static_win(int fd, struct Panel *p) {
 	struct Field *f;
 	int i;
 
-	printf("draw_static_win: fd=%d\n",fd);
 	out_fd=fd;
 	enable_raw_mode(fd);
-
 	get_scrn_size(fd,&last_line,&last_col);
-
-
 	clr_scrn(fd);
+
 	for(i=0,f=p->fields;f->label;i++,f=&p->fields[i]) {
 		if (f->type==TYPE_STATIC_TEXT) {
 			if ((f->line+1)<last_line) {
+				int rc;
 				set_cursor_position(fd,f->line+1,f->col+1);
-				write(fd,f->label,strlen(f->label));
+				rc=write(fd,f->label,strlen(f->label));
+				if (rc!=strlen(f->label)) {
+					printf("error from print: rc=%d, wanted %d\n", rc, strlen(f->label));
+				}
 			}
 		}
 	}

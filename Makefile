@@ -1,6 +1,7 @@
 
 #KREL=../../krel
-KREL=../RTScheduler-Discovery/boards/MB997C
+#KREL=../RTScheduler-Discovery/boards/MB997C
+KREL=../RTScheduler-Discovery/boards/BLACKPILL
 
 ## application brings own driver, specify the make target in the
 ## macro below. The make file is expected to create a object file
@@ -54,4 +55,4 @@ panellib/panel.o: panellib/panel.c
 
 
 clean:
-	rm -rf menu.c menu.h *.o obj myCore panellib/*.o
+	rm -rf menu.c menu.h *.o obj myCore myCore.bin panellib/*.o

@@ -154,10 +154,10 @@ static int handle_serial_data(int fd, int event, void *uref) {
 	char buf[128];
 	int rc;
 
-	printf("got event callback for serial data\n");
+//	printf("got event callback for serial data\n");
 	rc=io_read(fd,buf,sizeof(buf));
 	buf[rc]=0;
-	printf("hej, read returned %d\n",rc);
+//	printf("hej, read returned %d\n",rc);
 
 	if (obdd.mode==MODE_160B) {
 		if (strcmp(buf,"s")==0) {
@@ -178,10 +178,10 @@ static int handle_serial_data(int fd, int event, void *uref) {
 		}
 
 		currentP=currentP->next;
-		rc=io_control(obdd.fd_serial, F_SETFL, 0, 0);
+		rc=io_control(fd, F_SETFL, 0, 0);
 		currentP->initf();
 		draw_static_win(fd,currentP->panel);
-		rc=io_control(obdd.fd_serial, F_SETFL, (void *)O_NONBLOCK, 0);
+		rc=io_control(fd, F_SETFL, (void *)O_NONBLOCK, 0);
 	}
 
 	return 0;
@@ -298,9 +298,9 @@ static int handle_obd160_data(int fd, int event, void *uref) {
 }
 
 static void obd_gw_io(void *dum) {
-	int rc;
 
 	if (obdd.mode==MODE_160B) {
+		int rc;
 		int fd_obd=io_open("obd160_0");
 
 		if (fd_obd<0) {
@@ -334,14 +334,13 @@ static void obd_gw_io(void *dum) {
 
 
 		currentP->initf();
-		rc=io_control(obdd.fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
-//	rc=io_control(obdd.fd_serial, F_SETFL, 0, 0);
 		draw_static_win(obdd.fd_serial, currentP->panel);
 		set_cursor_position(obdd.fd_serial, last_line, 1);
-//	rc=io_control(obdd.fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
 
+		rc=io_control(obdd.fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
 		printf("usb serial set to non block\n");
 
+		// register event handler for data from car
 		register_event(fd_obd, EV_READ, handle_obd160_data, &obdd);
 	} else if (obdd.mode==MODE_8192B) {
 		int fd_obd=io_open("obd8192_0");
@@ -358,7 +357,7 @@ static void obd_gw_io(void *dum) {
 
 	register_timer(500, handle_timeout, 0);
 
-	printf("leaving\n");
+	printf("obd_gw_io: leaving\n");
 	endit=0;
 }
 
@@ -388,14 +387,18 @@ static void obd1(void *dum) {
 
 	printf("fd for obd serial %d\n", fd_serial);
 
+#if 0
 	rc=io_control(fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
 	if (rc<0) {
 		printf("failed to set serial port to nonblock\n");
 	}
-
+#endif
 	register_event(fd_serial, EV_READ, handle_serial_data, &obdd);
 
 	obd_gw_io(0);
+
+//	rc=io_control(fd_serial, F_SETFL, (void*)0, 0);
+	rc=io_control(fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
 
 	while(1) {
 		do_event();
@@ -405,7 +408,7 @@ static void obd1(void *dum) {
 		}
 #endif
 	}
-	printf("leaving\n");
+	printf("obd1 thread: leaving\n");
 	endit=0;
 }
 
