@@ -787,6 +787,11 @@ int update_RawData(int fd, char *indata) {
 	outf(&__RawData_fields[375],"0x%02x",rdd.col13[24]);
 	return 0;
 }
+
+
+int input_RawData(int fd, char *indata) {
+	return 0;
+}
 struct Panel __RawData={"RawData", __RawData_fields};
 struct Panel *RawData=&__RawData;
 
@@ -902,6 +907,11 @@ int update_FlagData(int fd, struct ECM_Regs *eregs) {
 	outb(&__FlagData_fields[42],"+",!eregs->MCUINST&0x80);
 	return 0;
 }
+
+
+int input_FlagData(int fd, struct ECM_Regs *eregs) {
+	return 0;
+}
 struct Panel __FlagData={"FlagData", __FlagData_fields};
 struct Panel *FlagData=&__FlagData;
 
@@ -996,6 +1006,11 @@ int update_SensorData(int fd, struct ECM_Regs *eregs) {
 	outf(&__SensorData_fields[34],"%3d",eregs->ALDLCNTR);
 	outf(&__SensorData_fields[36],"0x%02x",eregs->DISPFLOW);
 	outf(&__SensorData_fields[37],"%4d",(eregs->DISPFLOW*256)+eregs->DISPFLOW1);
+	return 0;
+}
+
+
+int input_SensorData(int fd, struct ECM_Regs *eregs) {
 	return 0;
 }
 struct Panel __SensorData={"SensorData", __SensorData_fields};
@@ -1100,6 +1115,11 @@ int update_ErrorData(int fd, struct ECM_Regs *eregs) {
 	outb(&__ErrorData_fields[44],"+",eregs->MALFFLG4&0x20);
 	outb(&__ErrorData_fields[47],"+",eregs->MALFFLG4&0x40);
 	outb(&__ErrorData_fields[50],"+",eregs->MALFFLG4&0x80);
+	return 0;
+}
+
+
+int input_ErrorData(int fd, struct ECM_Regs *eregs) {
 	return 0;
 }
 struct Panel __ErrorData={"ErrorData", __ErrorData_fields};
