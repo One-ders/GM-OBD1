@@ -13,6 +13,7 @@
 #define OBD1_PIN GPIO_PIN(GPIO_PC,5)
 #elif defined(BOARD_BLACKPILL)
 #define OBD1_PIN GPIO_PIN(GPIO_PB,10)
+#define OBD1_TXPIN GPIO_PIN(GPIO_PB,3)
 #else
 #error "Board not defined"
 

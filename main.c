@@ -57,6 +57,7 @@ struct pdata {
 struct pdata *currentP;
 struct pdata pdata[4];
 
+int menumode=1;
 extern unsigned int last_line, last_col;
 
 static int send_request(int argc, char **argv, struct Env *env);
@@ -99,8 +100,13 @@ static int send_req=0;
 static int handle_timeout(int dumfd, int dumevent, void *uref) {
 	if (obdd.mode==MODE_8192B) {
 		if (send_req) {
+			int rc;
 			send_req=0;
-			io_write(obdd.fd_obd, mode10_packet, sizeof(mode10_packet));
+printf("%t: write m10\n");
+			rc=io_write(obdd.fd_obd, mode10_packet, sizeof(mode10_packet));
+			if (rc!=sizeof(mode10_packet)) {
+				printf("failed to send mode10_packet\n");
+			}
 		}
 	}
 	return 0;
@@ -175,13 +181,22 @@ static int handle_serial_data(int fd, int event, void *uref) {
 			register_event(obdd.fd_obd, EV_READ, handle_obd8192_data, &obdd);
 			send_mode1_req();
 			return 0;
+		} else if (strcmp(buf,"m")==0) {
+			printf("toggle menu\n");
+			if (menumode) {
+				menumode=0;
+			} else {
+				menumode=1;
+			}
 		}
 
-		currentP=currentP->next;
-		rc=io_control(fd, F_SETFL, 0, 0);
-		currentP->initf();
-		draw_static_win(fd,currentP->panel);
-		rc=io_control(fd, F_SETFL, (void *)O_NONBLOCK, 0);
+		if (menumode) {
+			currentP=currentP->next;
+			rc=io_control(fd, F_SETFL, 0, 0);
+			currentP->initf();
+			draw_static_win(fd,currentP->panel);
+			rc=io_control(fd, F_SETFL, (void *)O_NONBLOCK, 0);
+		}
 	}
 
 	return 0;
@@ -197,13 +212,15 @@ static int handle_obd8192_data(int fd, int event, void *uref) {
 	int rc;
 
 	rc=io_read(fd,buf,sizeof(buf));
-	printf("hej, read returned %d\n",rc);
+	printf("%t: mode=obd8192: read returned %d bytes\n",rc);
 	dlen=rc;
 //	dump_data8192(buf);
 	if (obdd.fd_serial) {
 		int rc;
 		char *p=obuf;
 		int i;
+		rc=sprintf(p,"%t:");
+		p+=rc;
 		for(i=0;i<(dlen-1);i++) {
 			rc=sprintf(p,"0x%02x,", buf[i]);
 			p+=rc;
@@ -211,9 +228,9 @@ static int handle_obd8192_data(int fd, int event, void *uref) {
 		rc=sprintf(p,"0x%02x\n",buf[dlen-1]);
 		p+=rc;
 
-		rc=io_control(obdd.fd_serial, F_SETFL, (void*)0, 0);
+		io_control(obdd.fd_serial, F_SETFL, (void*)0, 0);
 		rc=io_write(obdd.fd_serial, obuf, p-obuf);
-		rc=io_control(obdd.fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
+		io_control(obdd.fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
 		if (rc<0) {
 			printf("failed to write obd data to serial\n");
 		}
@@ -279,21 +296,43 @@ static int handle_obd160_data(int fd, int event, void *uref) {
 	char buf[32];
 	int dlen;
 	int rc;
+	char obuf[512];
 
 	if (obdd.mode!=MODE_160B) {
 		printf("got event for wrong interface\n");
 		return 0;
 	}
 	rc=io_read(fd,buf,sizeof(buf));
-	printf("hej, read returned %d\n",rc);
+	printf("mode=obd_160, read returned %d bytes\n",rc);
 	dlen=rc;
-	dump_data160(buf);
+//	dump_data160(buf);
 
-#if 1
-	rc=io_control(obdd.fd_serial, F_SETFL, 0, 0);
-	currentP->updatef(obdd.fd_serial,buf);
-	rc=io_control(obdd.fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
-#endif
+
+	if (menumode) {
+		rc=io_control(obdd.fd_serial, F_SETFL, 0, 0);
+		currentP->updatef(obdd.fd_serial,buf);
+		rc=io_control(obdd.fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
+	} else {
+		int rc;
+		char *p=obuf;
+		int i;
+
+		rc=sprintf(p,"%t:");
+		p+=rc;
+		for(i=0;i<(dlen-1);i++) {
+			rc=sprintf(p,"0x%02x,", buf[i]);
+			p+=rc;
+		}
+		rc=sprintf(p,"0x%02x\n",buf[dlen-1]);
+		p+=rc;
+
+		io_control(obdd.fd_serial, F_SETFL, (void*)0, 0);
+		rc=io_write(obdd.fd_serial, obuf, p-obuf);
+		io_control(obdd.fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
+		if (rc<0) {
+			printf("failed to write obd data to serial\n");
+		}
+	}
 	return 0;
 }
 
@@ -372,7 +411,7 @@ static int obd_gw() {
 
 //========================================================================================
 
-static int current_mode=0;
+//static int current_mode=0;
 
 static void obd1(void *dum) {
 	int fd_serial=io_open("usb_serial0");

@@ -39,12 +39,17 @@
 
 #include "obd1_drv.h"
 
+#define NEW_2T_ITF
+
 #define MIN(a,b) (a<b)?a:b
 #define MAX_USERS 4
 
 static struct driver *leddrv;
 static struct driver *pindrv;
 static struct driver *timerdrv;
+
+static int zero=0;
+static int one=1;
 
 #define BAUD_8192 8192
 
@@ -89,12 +94,13 @@ struct obd160_data {
 struct obd8192_data {
 	struct device_handle *led_dh;
 	struct device_handle *pin_dh;
+	struct device_handle *txpin_dh;
 	struct device_handle *timer_dh;
 	// Rx data
 	unsigned int	rx_bstate;
 	unsigned int	rx_bcnt;
 	unsigned int 	rx_len;
-	unsigned char	rx_buf[4][124];
+	unsigned char	rx_buf[4][128];
 	unsigned int	rx_i;
 	unsigned int	rx_o;
 	unsigned int	rx_bits_recd;
@@ -184,7 +190,6 @@ static int wakeup_users160(struct obd160_data *obd,int ev) {
 			(user_data160[i].obd160_data==obd) &&
 			(user_data160[i].events&ev) &&
 			(user_data160[i].callback)) {
-			sys_printf("callback for user %d\n", i);
 			user_data160[i].callback(&user_data160[i].dh,ev&user_data160[i].events,user_data160[i].userdata);
 		}
 	}
@@ -204,7 +209,7 @@ static int pin_irq(struct device_handle *dh, int ev, void *dum) {
 		if (pin_stat==obd->prev_pin_stat) return 0;
 		obd->prev_pin_stat=pin_stat;
 
-		if (pin_stat==0) {
+		if (pin_stat!=0) {
 			// start bit
 			left=timerdrv->ops->control(obd->timer_dh,HR_TIMER_CANCEL, 0, 0);
 			if (obd->bnum==25) {
@@ -217,21 +222,21 @@ static int pin_irq(struct device_handle *dh, int ev, void *dum) {
 		}
 	} else if (obd_comm_speed==8192) {
 		int pin_stat;
-		int uSecSample=10;
+//		int uSecSample=10;
+		int uSecSample=40;
 		struct obd8192_data *obd=&obd8192_data_0;
-		unsigned int left;
 
 		if (!obd->tx_run) {
 			if (obd->rx_bstate==RX_IDLE) {
 
 				pindrv->ops->control(obd->pin_dh,GPIO_SENSE_PIN,&pin_stat,sizeof(pin_stat));
 
-				if (pin_stat!=0 ) {
+				if (pin_stat==0 ) {
 					sys_printf("hunting for start bit\n");
 					return 0;
 				}
 
-				left=timerdrv->ops->control(obd->timer_dh,HR_TIMER_CANCEL, 0, 0);
+				timerdrv->ops->control(obd->timer_dh,HR_TIMER_CANCEL, 0, 0);
 
 				obd->rx_bstate=RX_START_HUNT;
 				timerdrv->ops->control(obd->timer_dh,HR_TIMER_SET,&uSecSample,sizeof(uSecSample));
@@ -254,14 +259,18 @@ static int obd8192_timeout(struct device_handle *dh, int ev, void *dum) {
 		unsigned int bit_time=1000000/BAUD_8192; // 122 us
 		// put out a bit
 		if (obd->tx_char&1) {
-			pindrv->ops->control(obd->pin_dh, GPIO_SINK_PIN,0,0);
-#ifdef LED_GREEN
+			pindrv->ops->control(obd->txpin_dh, GPIO_SET_PIN,&one,4);
+#if defined(LED_GREEN)
 			leddrv->ops->control(obd->led_dh,LED_CTRL_ACTIVATE,&green,sizeof(green));
+#elif defined(LED_BLUE)
+			leddrv->ops->control(obd->led_dh,LED_CTRL_ACTIVATE,&blue,sizeof(blue));
 #endif
 		} else {
-			pindrv->ops->control(obd->pin_dh, GPIO_RELEASE_PIN,0,0);
-#ifdef LED_GREEN
+			pindrv->ops->control(obd->txpin_dh, GPIO_SET_PIN,&zero,4);
+#if defined(LED_GREEN)
 			leddrv->ops->control(obd->led_dh,LED_CTRL_DEACTIVATE,&green,sizeof(green));
+#elif defined(LED_BLUE)
+			leddrv->ops->control(obd->led_dh,LED_CTRL_DEACTIVATE,&blue,sizeof(blue));
 #endif
 		}
 		timerdrv->ops->control(obd->timer_dh,HR_TIMER_SET,&bit_time,sizeof(bit_time));
@@ -283,7 +292,7 @@ static int obd8192_timeout(struct device_handle *dh, int ev, void *dum) {
 			int uSecSample=1000000/BAUD_8192;
 			pindrv->ops->control(obd->pin_dh,GPIO_SENSE_PIN,&pin_stat,sizeof(pin_stat));
 
-			if (pin_stat!=0) {
+			if (pin_stat==0) {
 				// sample of potential start bit, proved to be wrong
 				obd->rx_bstate=RX_IDLE;
 				sys_printf("valid Startbit not recived\n");
@@ -298,7 +307,7 @@ static int obd8192_timeout(struct device_handle *dh, int ev, void *dum) {
 			unsigned int bit;
 
 			pindrv->ops->control(obd->pin_dh,GPIO_SENSE_PIN,&pin_stat,sizeof(pin_stat));
-			bit=pin_stat;
+			bit=pin_stat?0:1;
 
 			obd->rx_byte=(obd->rx_byte>>1)|(bit<<7);
 			obd->rx_bits_recd++;
@@ -310,7 +319,7 @@ static int obd8192_timeout(struct device_handle *dh, int ev, void *dum) {
 			return 0;
 		} else if (obd->rx_bstate==RX_STOPBIT) {
 			pindrv->ops->control(obd->pin_dh,GPIO_SENSE_PIN,&pin_stat,sizeof(pin_stat));
-			if (pin_stat!=1) {
+			if (pin_stat==1) {
 				sys_printf("valid Stopbit not recived, discard data\n");
 				obd->rx_bstate=RX_IDLE;
 				return 0;
@@ -353,7 +362,7 @@ static int obd160_timeout(struct device_handle *dh, int ev, void *dum) {
 		obd->rx_bstate=RX_SAMPLE;
 		pindrv->ops->control(obd->pin_dh,GPIO_SENSE_PIN,&pin_stat,sizeof(pin_stat));
 		timerdrv->ops->control(obd->timer_dh,HR_TIMER_SET,&uSectout,sizeof(uSectout));
-		bit=pin_stat?0:1;
+		bit=pin_stat?1:0;
 
 		if (bit) {
 			obd->b1cnt++;
@@ -416,16 +425,15 @@ static int in_interframe_space() {
 /******** handlers for different state *************/
 
 static void obd8192_startTx(struct obd8192_data *od) {
-	struct obd160_data *obd160=&obd160_data_0;
 	unsigned int tstartBit=1000000/BAUD_8192; // 122 us
 
 	od->tx_run=1;
-	timerdrv->ops->control(obd160->timer_dh,HR_TIMER_CANCEL,0,0);
+	timerdrv->ops->control(od->timer_dh,HR_TIMER_CANCEL,0,0);
 
 	if (od->tx_char&1) {
-		pindrv->ops->control(od->pin_dh, GPIO_SINK_PIN,0,0);
+		pindrv->ops->control(od->txpin_dh, GPIO_SET_PIN,&one,4);
 	} else {
-		pindrv->ops->control(od->pin_dh, GPIO_RELEASE_PIN,0,0);
+		pindrv->ops->control(od->txpin_dh, GPIO_SET_PIN,&zero,4);
 	}
 	od->tx_char>>=1;
 	od->tx_sent_bit++;
@@ -433,7 +441,7 @@ static void obd8192_startTx(struct obd8192_data *od) {
 }
 
 static int obd8192_wrstr(struct obd8192_data *od, const unsigned char *buf, int len) {
-	if (!od->tx_run) {
+	if ((!od->tx_run) || (od->rx_bstate!=RX_IDLE)) {
 		memcpy(od->tx_buf,buf,len);
 		od->tx_len=len;
 		od->tx_i=0;
@@ -442,6 +450,8 @@ static int obd8192_wrstr(struct obd8192_data *od, const unsigned char *buf, int 
 
 		obd8192_startTx(od);
 		return len;
+	} else {
+		sys_printf("ignoring write, busy\n");
 	}
 	return -1;
 }
@@ -498,6 +508,7 @@ static int obd8192_drv_control(struct device_handle *dh, int cmd, void *arg, int
 		case WR_CHAR: {
 			unsigned char *buf=(unsigned char *)arg;
 			if (obd_comm_speed==160) {
+				struct obd160_data *obd160=&obd160_data_0;
 				unsigned long int cpu_flags;
 again:
 				cpu_flags=disable_interrupts();
@@ -510,10 +521,11 @@ again:
 					goto again;
 				}
 				restore_cpu_flags(cpu_flags);
-				sys_printf("WR char in interframe space\n");
+				timerdrv->ops->control(obd160->timer_dh,HR_TIMER_CANCEL,0,0);
 			}
 
 			obd_comm_speed=8192;
+sys_printf("%t: wr: %d\n",size);
 			obd8192_wrstr(od,buf,size);
 
 			return size;
@@ -647,6 +659,7 @@ static int obd160_drv_start(void *inst) {
 	int flags;
 	int rc;
 	int pin;
+	int txpin;
 
 	/* Open Led driver so we can flash the leds a bit */
 	if (!leddrv) leddrv=driver_lookup(LED_DRV);
@@ -658,51 +671,94 @@ static int obd160_drv_start(void *inst) {
 
 	/* Open gpio driver, this will be our cable to the OBD1 pin E */
 	if (!pindrv) pindrv=driver_lookup(GPIO_DRV);
-	if (!pindrv) goto out1;
+	if (!pindrv) {
+		sys_printf("OBD1: missing GPIO_DRV\n");
+		goto out1;
+	}
+
 	obd160->pin_dh=pindrv->ops->open(pindrv->instance,pin_irq,(void *)obd160);
-	if (!obd160->pin_dh) goto out1;
+	if (!obd160->pin_dh) {
+		sys_printf("OBD1: could not open GPIO_DRV\n");
+		goto out1;
+	}
 	obd8192->pin_dh=obd160->pin_dh;
+
+	/* bind txpin */
+	obd8192->txpin_dh=pindrv->ops->open(pindrv->instance,0,(void *)obd8192);
+	if (!obd8192->txpin_dh) {
+		sys_printf("OBD1: could not open second inst. GPIO_DRV\n");
+		goto out2;
+	}
 
 	/* Open High Resolution timer for pulse meassurements */
 	if (!timerdrv) timerdrv=driver_lookup(HR_TIMER);
-	if (!timerdrv) goto out2;
+	if (!timerdrv) {
+		sys_printf("OBD1: missing HR_TIMER\n");
+		goto out3;
+	}
 	obd160->timer_dh=timerdrv->ops->open(timerdrv->instance,obd160_timeout,(void *)obd160);
-	if (!obd160->timer_dh) goto out2;
-
-	if (obd160==&obd160_data_0) {
-		pin=OBD1_PIN;
-	} else {
-		sys_printf("OBD1 protocol driver: error no pin assigned for driver\n");
+	if (!obd160->timer_dh) {
+		sys_printf("OBD1: could not open HR_TIMER\n");
 		goto out3;
 	}
 
-	/* Program pin to be open drain, pull down, irq */
-	rc=pindrv->ops->control(obd160->pin_dh,GPIO_BIND_PIN,&pin,sizeof(pin));
-	if (rc<0) goto out3;
+	if (obd160==&obd160_data_0) {
+		pin=OBD1_PIN;
+		txpin=OBD1_TXPIN;
+	} else {
+		sys_printf("OBD1 protocol driver: error no pin assigned for driver\n");
+		goto out4;
+	}
 
-	flags=GPIO_DIR(0,GPIO_BUSPIN);
-	flags=GPIO_DRIVE(flags,GPIO_PULLUP);
+	/* Program rx pin to be open drain, pull down, irq */
+	rc=pindrv->ops->control(obd160->pin_dh,GPIO_BIND_PIN,&pin,sizeof(pin));
+	if (rc<0) {
+		sys_printf("OBD1 protocol driver: failed to bind rx pin\n");
+		goto out4;
+	}
+
+	flags=GPIO_DIR(0,GPIO_INPUT);
+	flags=GPIO_DRIVE(flags,GPIO_PULLDOWN);
 	flags=GPIO_SPEED(flags,GPIO_SPEED_HIGH);
 	flags=GPIO_IRQ_ENABLE(flags);
 	rc=pindrv->ops->control(obd160->pin_dh,GPIO_SET_FLAGS,&flags,sizeof(flags));
 	if (rc<0) {
 		sys_printf("OBD1 reader driver: pin_flags update failed\n");
-		goto out3;
+		goto out4;
 	}
+
+	/* Program tx pin to be  drain, pull down, irq */
+	rc=pindrv->ops->control(obd8192->txpin_dh,GPIO_BIND_PIN,&txpin,sizeof(txpin));
+	if (rc<0) {
+		sys_printf("OBD1 reader driver: txpin bind failed\n");
+		goto out4;
+	}
+
+	flags=GPIO_DIR(0,GPIO_OUTPUT);
+	flags=GPIO_DRIVE(flags,GPIO_PUSHPULL);
+	flags=GPIO_SPEED(flags,GPIO_SPEED_HIGH);
+	rc=pindrv->ops->control(obd8192->txpin_dh,GPIO_SET_FLAGS,&flags,sizeof(flags));
+	if (rc<0) {
+		sys_printf("OBD1 reader driver: txpin_flags update failed\n");
+		goto out4;
+	}
+	pindrv->ops->control(obd8192->txpin_dh, GPIO_SET_PIN,&zero,4);
+
 	sys_printf("OBD1 protocol driver: Started\n");
 
 	return 0;
 
-out3:
+out4:
 	sys_printf("OBD1: failed to bind pin to GPIO\n");
 	timerdrv->ops->close(obd160->timer_dh);
 
+out3:
+	pindrv->ops->close(obd8192->txpin_dh);
+
 out2:
-	sys_printf("OBD1: failed to open HR_TIMER\n");
 	pindrv->ops->close(obd160->pin_dh);
 
 out1:
-	sys_printf("OBD1: failed to open GPIO_DRV\n");
 	leddrv->ops->close(obd160->led_dh);
 	return 0;
 }
