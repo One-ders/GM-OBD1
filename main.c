@@ -102,7 +102,6 @@ static int handle_timeout(int dumfd, int dumevent, void *uref) {
 		if (send_req) {
 			int rc;
 			send_req=0;
-printf("%t: write m10\n");
 			rc=io_write(obdd.fd_obd, mode10_packet, sizeof(mode10_packet));
 			if (rc!=sizeof(mode10_packet)) {
 				printf("failed to send mode10_packet\n");
