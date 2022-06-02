@@ -525,7 +525,6 @@ again:
 			}
 
 			obd_comm_speed=8192;
-sys_printf("%t: wr: %d\n",size);
 			obd8192_wrstr(od,buf,size);
 
 			return size;
