@@ -1,43 +1,62 @@
-#if 0
+#ifdef __linux__
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 #include <unistd.h>
 #include <termios.h>
+#include <errno.h>
 #include "panel.h"
-#endif
-
+#else
 #include <string.h>
 #include <stdarg.h>
 #include <sys.h>
 #include <io.h>
 #include "panel.h"
-
 #define write io_write
 #define read io_read
+#endif
+
 
 
 static int out_fd;
-#if 0
+#ifdef __linux__
 static struct termios	orig_termios;
 static int		orig_fd;
+static int attat_already=0;
 #endif
 
 unsigned int last_col, last_line;
 
-#if 0
+#ifdef __linux__
 static void restore_termios() {
-	tcsetattr(orig_fd, TCSAFLUSH, &orig_termios);
+	int rc;
+	rc=tcsetattr(orig_fd, TCSAFLUSH, &orig_termios);
+	if (rc<0) {
+		perror("tcsetattr");
+	}
+//	fprintf(stderr, "restore termios orig_fd=%d, gave rc=%d\n",orig_fd, rc);
+
 }
 #endif
 
 void enable_raw_mode(int fd) {
-#if 0
+#ifdef __linux__
 	struct termios raw;
+	int rc;
 	orig_fd=fd;
-	tcgetattr(fd, &orig_termios);
-	atexit(restore_termios);
+	if (!attat_already) {
+		attat_already=1;
+		rc=tcgetattr(fd, &orig_termios);
+		if (rc<0) {
+			perror("tcgetattr");
+		}
+//		fprintf(stderr, "tcgetaddr with fd %d\n", fd);
+		rc=atexit(restore_termios);
+		if (rc<0) {
+			perror("atexit");
+		}
+	}
 	raw=orig_termios;
 	raw.c_lflag &= ~(ECHO | ICANON);
 	tcsetattr(fd, TCSAFLUSH, &raw);
