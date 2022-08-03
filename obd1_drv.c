@@ -196,7 +196,7 @@ static int wakeup_users160(struct obd160_data *obd,int ev) {
 	return 0;
 }
 
-// on pin irq, look for transition to low, this is how a start bit looks
+// on pin irq, look for transition to low, this is the sign of a start bit.
 static int pin_irq(struct device_handle *dh, int ev, void *dum) {
 
 	if (obd_comm_speed==160) {
@@ -206,10 +206,13 @@ static int pin_irq(struct device_handle *dh, int ev, void *dum) {
 		unsigned int left;
 
 		pindrv->ops->control(obd->pin_dh,GPIO_SENSE_PIN,&pin_stat,sizeof(pin_stat));
-		if (pin_stat==obd->prev_pin_stat) return 0;
+		if (pin_stat==obd->prev_pin_stat) {
+			sys_printf("irq with same state: %d\n", pin_stat);
+			return 0;
+		}
 		obd->prev_pin_stat=pin_stat;
 
-		if (pin_stat!=0) {
+		if (pin_stat) {
 			// start bit
 			left=timerdrv->ops->control(obd->timer_dh,HR_TIMER_CANCEL, 0, 0);
 			if (obd->bnum==25) {
@@ -352,10 +355,12 @@ static int obd8192_timeout(struct device_handle *dh, int ev, void *dum) {
 	return 0;
 }
 
+static int in_synch=0;
+
 static int obd160_timeout(struct device_handle *dh, int ev, void *dum) {
 	int pin_stat;
 	struct obd160_data *obd=(struct obd160_data *)dum;
-	unsigned int uSectout=6200-2500;
+	unsigned int uSectout=6000-2500;
 
 	if (obd->rx_bstate==RX_BIT_START) {
 		int bit;
@@ -364,6 +369,7 @@ static int obd160_timeout(struct device_handle *dh, int ev, void *dum) {
 		timerdrv->ops->control(obd->timer_dh,HR_TIMER_SET,&uSectout,sizeof(uSectout));
 		bit=pin_stat?1:0;
 
+		// always monitor bit stream, only sync will have 9 in a row,
 		if (bit) {
 			obd->b1cnt++;
 		} else {
@@ -374,13 +380,14 @@ static int obd160_timeout(struct device_handle *dh, int ev, void *dum) {
 			obd->byte=0;
 			obd->bcnt=0;
 			obd->bnum=0;
-//			sys_printf("got sync\n");
+			sys_printf("got sync\n");
+			in_synch=1;
 #ifdef LED_RED
 			leddrv->ops->control(obd->led_dh,LED_CTRL_DEACTIVATE,&red,sizeof(red));
 #elif defined(LED_BLUE)
 			leddrv->ops->control(obd->led_dh,LED_CTRL_DEACTIVATE,&blue,sizeof(blue));
 #endif
-		} else {
+		} else if (in_synch) {
 			obd->byte=(obd->byte<<1)|bit;
 			obd->bcnt++;
 			if (obd->bcnt==9) {
@@ -391,8 +398,9 @@ static int obd160_timeout(struct device_handle *dh, int ev, void *dum) {
 				obd->bcnt=0;
 				if (obd->bnum==25) {
 					obd->i++;
-					if ((obd->i-obd->o)>3) {
-						obd->o=obd->i-3;
+					if ((obd->i-obd->o)>3) {   // we can have 4 messages in queue,
+						obd->o=obd->i-3;   // so loose the oldest message. maybe we shold
+								   // discard the latest one instead.
 					}
 					wakeup_users160(obd,EV_READ|EV_WRITE);
 #ifdef LED_RED
@@ -404,9 +412,11 @@ static int obd160_timeout(struct device_handle *dh, int ev, void *dum) {
 			}
 		}
 	} else {
+//		sys_printf("timeout in Sample state\n");
 		if (obd->bnum==25) {
 			unsigned int interframe_timer=1000000;
 			timerdrv->ops->control(obd->timer_dh,HR_TIMER_SET,&interframe_timer,sizeof(interframe_timer));
+			in_synch=0;
 			interframe_space=1;
 			if (obd8192_data_0.wblocker_list.first) {
 				sys_wakeup_from_list(&obd8192_data_0.wblocker_list);

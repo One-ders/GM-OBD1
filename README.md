@@ -3,9 +3,12 @@
 What is it, and what does it do.
 ================================
 1. An implemetation to communicate with old GM ECM's specifically 1227165.
-2. it runs on the ST/M Discovery board MB997C.
-3. The file config.h specifies the pin to be used for ECM communication (PC5),
-and should via a 1K resistor be connected to pin E on the ALDL/OBD connector.
+2. it runs on a BLACKPILL 10$ board, but any STM 32 would do.
+3. The file config.h specifies the pin to be used for ECM communication (PB10 rx and PB3 tx),
+Earlier version (last commit: 82b610d) used one wire with a serial 10K resistor between ALDL line and MCU. But a small
+2 transistor level adaptor was created to better control voltage levels. (ECM is 5 volts. STM is 3.3).
+![OBD1 connector with adaptor and schematic](./pics/20220803_140636.jpg?raw=true "OBD1 connector with adaptor")
+
 4. on the other side it will publish an usb-serial interface. Here a raw byte stream will presented to a laptop running a scanner software.
 5. the Interface will start by reading the 160 baud 25 bytes, frames.
 This can be used to get most of the information needed.

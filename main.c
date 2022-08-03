@@ -180,13 +180,19 @@ static int handle_serial_data(int fd, int event, void *uref) {
 			register_event(obdd.fd_obd, EV_READ, handle_obd8192_data, &obdd);
 			send_mode1_req();
 			return 0;
-		} else if (strcmp(buf,"m")==0) {
+		} else if (strcmp(buf,"t")==0) {
 			printf("toggle menu\n");
 			if (menumode) {
 				menumode=0;
 			} else {
 				menumode=1;
 			}
+		} else if (strcmp(buf,"m")==0) {
+			printf("switch to menu\n");
+			menumode=1;
+		} else if (strcmp(buf,"r")==0) {
+			printf("switch to raw\n");
+			menumode=0;
 		}
 
 		if (menumode) {
