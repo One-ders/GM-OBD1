@@ -63,7 +63,7 @@ unsigned int red=LED_RED;
 unsigned int blue=LED_BLUE;
 #endif
 
-static int interframe_space;
+static int interframe_space=0;
 
 #define OBD160_STATE_IDLE	0
 
@@ -75,12 +75,12 @@ struct obd160_data {
 	struct device_handle *pin_dh;
 	struct device_handle *timer_dh;
 	volatile int	prev_pin_stat;
-	unsigned int	rx_bstate;
-	unsigned int	rx_state;
+//	unsigned int	rx_bstate;
 	unsigned int	b1cnt;
 	unsigned int	bcnt;
 	unsigned int	byte;
 	unsigned int    bnum;
+	unsigned int	in_synch;
 	volatile int	i;
 	volatile int	o;
 	volatile unsigned char buf[4][32];
@@ -196,14 +196,31 @@ static int wakeup_users160(struct obd160_data *obd,int ev) {
 	return 0;
 }
 
+static void led_on(struct device_handle *led_dh) {
+#ifdef LED_RED
+	leddrv->ops->control(led_dh,LED_CTRL_ACTIVATE,&red,sizeof(red));
+#elif defined(LED_BLUE)
+	leddrv->ops->control(led_dh,LED_CTRL_ACTIVATE,&blue,sizeof(blue));
+#endif
+}
+
+static void led_off(struct device_handle *led_dh) {
+#ifdef LED_RED
+	leddrv->ops->control(led_dh,LED_CTRL_DEACTIVATE,&red,sizeof(red));
+#elif defined(LED_BLUE)
+	leddrv->ops->control(led_dh,LED_CTRL_DEACTIVATE,&blue,sizeof(blue));
+#endif
+}
+
 // on pin irq, look for transition to low, this is the sign of a start bit.
 static int pin_irq(struct device_handle *dh, int ev, void *dum) {
 
 	if (obd_comm_speed==160) {
 		int pin_stat;
-		int uSecSample=2500;
+		int uSecBit=6250;
 		struct obd160_data *obd=(struct obd160_data *)dum;
-		unsigned int left;
+		int left;
+		int bit=0;
 
 		pindrv->ops->control(obd->pin_dh,GPIO_SENSE_PIN,&pin_stat,sizeof(pin_stat));
 		if (pin_stat==obd->prev_pin_stat) {
@@ -212,17 +229,79 @@ static int pin_irq(struct device_handle *dh, int ev, void *dum) {
 		}
 		obd->prev_pin_stat=pin_stat;
 
-		if (pin_stat) {
+		if (pin_stat) { // wire low
 			// start bit
 			left=timerdrv->ops->control(obd->timer_dh,HR_TIMER_CANCEL, 0, 0);
 			if (obd->bnum==25) {
 				obd->bnum=0;
-				sys_printf("interframe spacing %d uS\n", 1000000-left);
+				if (left>0) {
+					sys_printf("interframe spacing %d uS\n", 1000000-left);
+				} else {
+					sys_printf("missing interframe space flag on new frame start\n");
+				}
 				interframe_space=0;
 			}
-			obd->rx_bstate=RX_BIT_START;
-			timerdrv->ops->control(obd->timer_dh,HR_TIMER_SET,&uSecSample,sizeof(uSecSample));
+			timerdrv->ops->control(obd->timer_dh,HR_TIMER_SET,&uSecBit,sizeof(uSecBit));
+		} else { // wire went high
+			left=timerdrv->ops->control(obd->timer_dh,HR_TIMER_PROBE, 0, 0);
+			if (left<0) {
+//				sys_printf("aldl line go passive, but no timer running\n");
+				return 0;
+			}
+			if (left<2500) {
+//				sys_printf("wire went hi, after %d uS, a one\n", left);
+
+				// always monitor bit stream, only sync will have 9 in a row,
+				obd->b1cnt++;
+
+				if (obd->b1cnt==9) {
+					sys_printf("got synch\n");
+					obd->byte=0;
+					obd->bcnt=0;
+					obd->bnum=0;
+					obd->in_synch=1;
+
+					led_on(obd->led_dh);
+					return(0);
+				}
+
+				if (obd->b1cnt>9) {
+					sys_printf("b1cnt==%d\n",obd->b1cnt);
+					obd->b1cnt-=9;
+				}
+				bit=1;
+
+			} else if (left>4000) {
+//				sys_printf("wire went hi, after %d uS, a zero\n", left);
+				obd->b1cnt=0;         // reset 9 ones monitor
+				bit=0;
+			}
+
+			if (obd->in_synch) {
+				obd->byte=(obd->byte<<1)|bit;
+				obd->bcnt++;
+				if (obd->bcnt==9) {
+					obd->buf[obd->i&0x3][obd->bnum]=obd->byte;
+					obd->bnum++;
+//					sys_printf("got byte nr %d:  %x\n", obd->bnum, obd->byte);
+					obd->byte=0;
+					obd->bcnt=0;
+					if (obd->bnum==25) {
+						obd->in_synch=0;
+						obd->b1cnt=0;
+						obd->i++;
+						if ((obd->i-obd->o)>3) {   // we can have 4 messages in queue,
+							obd->o=obd->i-3;   // so loose the oldest message. maybe we shold
+									   // discard the latest one instead.
+						}
+						wakeup_users160(obd,EV_READ|EV_WRITE);
+						led_off(obd->led_dh);
+					}
+				}
+			}
+
 		}
+
 	} else if (obd_comm_speed==8192) {
 		int pin_stat;
 //		int uSecSample=10;
@@ -263,18 +342,10 @@ static int obd8192_timeout(struct device_handle *dh, int ev, void *dum) {
 		// put out a bit
 		if (obd->tx_char&1) {
 			pindrv->ops->control(obd->txpin_dh, GPIO_SET_PIN,&one,4);
-#if defined(LED_GREEN)
-			leddrv->ops->control(obd->led_dh,LED_CTRL_ACTIVATE,&green,sizeof(green));
-#elif defined(LED_BLUE)
-			leddrv->ops->control(obd->led_dh,LED_CTRL_ACTIVATE,&blue,sizeof(blue));
-#endif
+			led_on(obd->led_dh);
 		} else {
 			pindrv->ops->control(obd->txpin_dh, GPIO_SET_PIN,&zero,4);
-#if defined(LED_GREEN)
-			leddrv->ops->control(obd->led_dh,LED_CTRL_DEACTIVATE,&green,sizeof(green));
-#elif defined(LED_BLUE)
-			leddrv->ops->control(obd->led_dh,LED_CTRL_DEACTIVATE,&blue,sizeof(blue));
-#endif
+			led_off(obd->led_dh);
 		}
 		timerdrv->ops->control(obd->timer_dh,HR_TIMER_SET,&bit_time,sizeof(bit_time));
 		obd->tx_sent_bit++;
@@ -355,74 +426,22 @@ static int obd8192_timeout(struct device_handle *dh, int ev, void *dum) {
 	return 0;
 }
 
-static int in_synch=0;
-
 static int obd160_timeout(struct device_handle *dh, int ev, void *dum) {
-	int pin_stat;
+//	int pin_stat;
 	struct obd160_data *obd=(struct obd160_data *)dum;
-	unsigned int uSectout=6000-2500;
+//	unsigned int uSectout=6000-2500;
 
-	if (obd->rx_bstate==RX_BIT_START) {
-		int bit;
-		obd->rx_bstate=RX_SAMPLE;
-		pindrv->ops->control(obd->pin_dh,GPIO_SENSE_PIN,&pin_stat,sizeof(pin_stat));
-		timerdrv->ops->control(obd->timer_dh,HR_TIMER_SET,&uSectout,sizeof(uSectout));
-		bit=pin_stat?1:0;
-
-		// always monitor bit stream, only sync will have 9 in a row,
-		if (bit) {
-			obd->b1cnt++;
-		} else {
-			obd->b1cnt=0;
-		}
-
-		if (obd->b1cnt==9) {
-			obd->byte=0;
-			obd->bcnt=0;
-			obd->bnum=0;
-			sys_printf("got sync\n");
-			in_synch=1;
-#ifdef LED_RED
-			leddrv->ops->control(obd->led_dh,LED_CTRL_DEACTIVATE,&red,sizeof(red));
-#elif defined(LED_BLUE)
-			leddrv->ops->control(obd->led_dh,LED_CTRL_DEACTIVATE,&blue,sizeof(blue));
-#endif
-		} else if (in_synch) {
-			obd->byte=(obd->byte<<1)|bit;
-			obd->bcnt++;
-			if (obd->bcnt==9) {
-				obd->buf[obd->i&0x3][obd->bnum]=obd->byte;
-				obd->bnum++;
-//				sys_printf("got byte nr %d:  %x\n", obd->bnum, obd->byte);
-				obd->byte=0;
-				obd->bcnt=0;
-				if (obd->bnum==25) {
-					obd->i++;
-					if ((obd->i-obd->o)>3) {   // we can have 4 messages in queue,
-						obd->o=obd->i-3;   // so loose the oldest message. maybe we shold
-								   // discard the latest one instead.
-					}
-					wakeup_users160(obd,EV_READ|EV_WRITE);
-#ifdef LED_RED
-					leddrv->ops->control(obd->led_dh,LED_CTRL_ACTIVATE,&red,sizeof(red));
-#elif defined(LED_BLUE)
-					leddrv->ops->control(obd->led_dh,LED_CTRL_ACTIVATE,&blue,sizeof(blue));
-#endif
-				}
-			}
-		}
-	} else {
-//		sys_printf("timeout in Sample state\n");
-		if (obd->bnum==25) {
-			unsigned int interframe_timer=1000000;
-			timerdrv->ops->control(obd->timer_dh,HR_TIMER_SET,&interframe_timer,sizeof(interframe_timer));
-			in_synch=0;
-			interframe_space=1;
-			if (obd8192_data_0.wblocker_list.first) {
-				sys_wakeup_from_list(&obd8192_data_0.wblocker_list);
-			}
+//	sys_printf("timeout: bit time\n");
+	if (obd->bnum==25) {
+		unsigned int interframe_timer=1000000;
+//		sys_printf("timeout: setup interframe timer\n");
+		timerdrv->ops->control(obd->timer_dh,HR_TIMER_SET,&interframe_timer,sizeof(interframe_timer));
+		interframe_space=1;
+		if (obd8192_data_0.wblocker_list.first) {
+			sys_wakeup_from_list(&obd8192_data_0.wblocker_list);
 		}
 	}
+	led_off(obd->led_dh);
 
 	return 0;
 }

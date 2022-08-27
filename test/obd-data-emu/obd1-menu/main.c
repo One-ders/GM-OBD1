@@ -346,19 +346,19 @@ static void obd_gw_io(char *dev) {
 
 	currentP=&pdata[0];
 
-	pdata[0].panel=RawData;
-	pdata[0].initf=init_RawData;
-	pdata[0].updatef=update_RawData;
+	pdata[0].panel=SensorData;
+	pdata[0].initf=init_SensorData;
+	pdata[0].updatef=update_SensorData;
 	pdata[0].next=&pdata[1];
 
-	pdata[1].panel=FlagData;
-	pdata[1].initf=init_FlagData;
-	pdata[1].updatef=update_FlagData;
+	pdata[1].panel=RawData;
+	pdata[1].initf=init_RawData;
+	pdata[1].updatef=update_RawData;
 	pdata[1].next=&pdata[2];
 
-	pdata[2].panel=SensorData;
-	pdata[2].initf=init_SensorData;
-	pdata[2].updatef=update_SensorData;
+	pdata[2].panel=FlagData;
+	pdata[2].initf=init_FlagData;
+	pdata[2].updatef=update_FlagData;
 	pdata[2].next=&pdata[3];
 
 	pdata[3].panel=ErrorData;

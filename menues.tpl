@@ -11,7 +11,7 @@ PROMIDB !$a03!$b03!$c03!$d03!$e03!$f03!$g03!$h03!$i03!$j03!$k03!$l03!$m03!$n03!
 IAC     !$a04!$b04!$c04!$d04!$e04!$f04!$g04!$h04!$i04!$j04!$k04!$l04!$m04!$n04!
 CT      !$a05!$b05!$c05!$d05!$e05!$f05!$g05!$h05!$i05!$j05!$k05!$l05!$m05!$n05!
 MPH     !$a06!$b06!$c06!$d06!$e06!$f06!$g06!$h06!$i06!$j06!$k06!$l06!$m06!$n06!
-MAP     !$a07!$b07!$c07!$d07!$e07!$f07!$g07!$h07!$i07!$j07!$k07!$l07!$m07!$n07!
+EGRDC   !$a07!$b07!$c07!$d07!$e07!$f07!$g07!$h07!$i07!$j07!$k07!$l07!$m07!$n07!
 RPM     !$a08!$b08!$c08!$d08!$e08!$f08!$g08!$h08!$i08!$j08!$k08!$l08!$m08!$n08!
 TPS     !$a09!$b09!$c09!$d09!$e09!$f09!$g09!$h09!$i09!$j09!$k09!$l09!$m09!$n09!
 INT     !$a10!$b10!$c10!$d10!$e10!$f10!$g10!$h10!$i10!$j10!$k10!$l10!$m10!$n10!
@@ -21,7 +21,7 @@ MALFFLG2!$a13!$b13!$c13!$d13!$e13!$f13!$g13!$h13!$i13!$j13!$k13!$l13!$m13!$n13!
 MALFFLG3!$a14!$b14!$c14!$d14!$e14!$f14!$g14!$h14!$i14!$j14!$k14!$l14!$m14!$n14!
 MALFFLG4!$a15!$b15!$c15!$d15!$e15!$f15!$g15!$h15!$i15!$j15!$k15!$l15!$m15!$n15!
 MWAF1   !$a16!$b16!$c16!$d16!$e16!$f16!$g16!$h16!$i16!$j16!$k16!$l16!$m16!$n16!
-VOLT    !$a17!$b17!$c17!$d17!$e17!$f17!$g17!$h17!$i17!$j17!$k17!$l17!$m17!$n17!
+MAT     !$a17!$b17!$c17!$d17!$e17!$f17!$g17!$h17!$i17!$j17!$k17!$l17!$m17!$n17!
 MCUINST !$a18!$b18!$c18!$d18!$e18!$f18!$g18!$h18!$i18!$j18!$k18!$l18!$m18!$n18!
 LV8     !$a19!$b19!$c19!$d19!$e19!$f19!$g19!$h19!$i19!$j19!$k19!$l19!$m19!$n19!
 BLM     !$a20!$b20!$c20!$d20!$e20!$f20!$g20!$h20!$i20!$j20!$k20!$l20!$m20!$n20!
@@ -174,6 +174,25 @@ $FieldInfo
 #DECL(unsigned char OBPINJ;)
 #DECL(unsigned char OBPINJ1;)
 #DECL(};)
+DECL(struct vpair {)
+DECL(        unsigned int raw;)
+DECL(        unsigned int scalefactor;)
+DECL(};)
+DECL(struct vpair vpair[] = { {   0, 200},{  18, 190},{  24, 167},{  30, 150},{  37, 135},)
+DECL(		{  46, 120},{  56, 110},{  66,  98},{  78,  89},{  90,  83},{ 103,  78},)
+DECL(		{ 116,  73},{ 129,  70},{ 141,  67},{ 153,  65},{ 163,  64},{ 174,  63},)
+DECL(		{ 211,  64},{ 216,  65},{ 221,  66},{ 225,  67},{ 229,  68},{ 232,  69},)
+DECL(		{ 234,  70},{ 237,  72},{ 239,  73},{ 241,  75},{ 243,  76},{ 255,  94},)
+DECL(};)
+DECL(int cval(unsigned int rval) {)
+DECL(int i;)
+DECL(for(i=0;i<sizeof(vpair);i++) {)
+DECL(if (rval<=vpair[i].raw) {)
+DECL(return (((rval*vpair[i].scalefactor)/100)-40);)
+DECL(})
+DECL(})
+DECL(return 0;)
+DECL(})
 DECL(char *xtoS(int val, int scale, char *buf, int bsize) {)
 DECL( char neg=' ';)
 DECL( if (val<0) {)
@@ -182,6 +201,9 @@ DECL( val=-val;)
 DECL( })
 DECL(  sprintf(buf,"%c%d.%02d",neg,val/scale,val%scale);)
 DECL(  return buf; )
+DECL(})
+DECL(int c_to_f(int cval) {)
+DECL(   return(((cval*18)+320)/10);)
 DECL(})
 UPDATE(char buf1[16];)
 UPDATE(outf($01,"0x%02x",eregs->ISSPMP);)
@@ -202,14 +224,14 @@ UPDATE(outf($15,"%3d",eregs->CORRCL);)
 UPDATE(outf($16,"0x%02x",eregs->ADO2AF);)
 UPDATE(outf($17,"%6s",xtoS((eregs->ADO2AF*444),100,buf1,sizeof(buf1)));)
 UPDATE(outf($18,"0x%02x",eregs->MAT);)
-UPDATE(outf($19,"%6s",xtoS((eregs->MAT*135)-4000,100,buf1,sizeof(buf1)));)
-UPDATE(outf($20,"%6s",xtoS((eregs->MAT*75)-4000,100,buf1,sizeof(buf1)));)
+UPDATE(outf($19,"%6s",xtoS(c_to_f(cval(eregs->MAT)),1,buf1,sizeof(buf1)));)
+UPDATE(outf($20,"%6s",xtoS(cval(eregs->MAT),1,buf1,sizeof(buf1)));)
 UPDATE(outf($21,"0x%02x",eregs->BLM);)
 UPDATE(outf($22,"%3d",eregs->BLM);)
 UPDATE(outf($23,"0x%02x",eregs->ALDLCNTR);)
 UPDATE(outf($24,"%3d",eregs->ALDLCNTR);)
 UPDATE(outf($25,"0x%02x",eregs->DISPFLOW);)
-UPDATE(outf($26,"%4d",(eregs->DISPFLOW*256)+eregs->DISPFLOW1);)
+UPDATE(outf($26,"%3d.%02d",eregs->DISPFLOW,((eregs->DISPFLOW1*39)/100));)
 $EndFieldInfo
 $EndPanel
 

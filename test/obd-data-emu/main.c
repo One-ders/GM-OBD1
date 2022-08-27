@@ -234,9 +234,14 @@ int main(int argc, char **argv) {
 				}
 				break;
 			default:
-				fprintf(stderr, "need input file name with -d flag");
+				fprintf(stderr, "need input file name with -d flag\n");
 				exit(1);
 		}
+	}
+
+	if (!f) {
+		fprintf(stderr, "need input file name with -d flag\n");
+		exit(1);
 	}
 
 	fd=open_ptmx();

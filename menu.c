@@ -109,7 +109,7 @@ struct Field __RawData_fields[]={
 {"$l07",0,9,67,0,},
 {"$m07",0,9,72,0,},
 {"$n07",0,9,77,0,},
-{"MAP     !    !    !    !    !    !    !    !    !    !    !    !    !    !    !",1,9,0,80,},
+{"EGRDC   !    !    !    !    !    !    !    !    !    !    !    !    !    !    !",1,9,0,80,},
 {"$a08",0,10,12,0,},
 {"$b08",0,10,17,0,},
 {"$c08",0,10,22,0,},
@@ -259,7 +259,7 @@ struct Field __RawData_fields[]={
 {"$l17",0,19,67,0,},
 {"$m17",0,19,72,0,},
 {"$n17",0,19,77,0,},
-{"VOLT    !    !    !    !    !    !    !    !    !    !    !    !    !    !    !",1,19,0,80,},
+{"MAT     !    !    !    !    !    !    !    !    !    !    !    !    !    !    !",1,19,0,80,},
 {"$a18",0,20,12,0,},
 {"$b18",0,20,17,0,},
 {"$c18",0,20,22,0,},
@@ -962,6 +962,25 @@ struct Field __SensorData_fields[]={
 {0,0,0,0,0,},};
 
 
+struct vpair {
+unsigned int raw;
+unsigned int scalefactor;
+};
+struct vpair vpair[] = { {   0, 200},{  18, 190},{  24, 167},{  30, 150},{  37, 135},
+{  46, 120},{  56, 110},{  66,  98},{  78,  89},{  90,  83},{ 103,  78},
+{ 116,  73},{ 129,  70},{ 141,  67},{ 153,  65},{ 163,  64},{ 174,  63},
+{ 211,  64},{ 216,  65},{ 221,  66},{ 225,  67},{ 229,  68},{ 232,  69},
+{ 234,  70},{ 237,  72},{ 239,  73},{ 241,  75},{ 243,  76},{ 255,  94},
+};
+int cval(unsigned int rval) {
+int i;
+for(i=0;i<sizeof(vpair);i++) {
+if (rval<=vpair[i].raw) {
+return (((rval*vpair[i].scalefactor)/100)-40);
+}
+}
+return 0;
+}
 char *xtoS(int val, int scale, char *buf, int bsize) {
 char neg=' ';
 if (val<0) {
@@ -970,6 +989,9 @@ val=-val;
 }
 sprintf(buf,"%c%d.%02d",neg,val/scale,val%scale);
 return buf; 
+}
+int c_to_f(int cval) {
+return(((cval*18)+320)/10);
 }
 
 
@@ -998,14 +1020,14 @@ int update_SensorData(int fd, struct ECM_Regs *eregs) {
 	outf(&__SensorData_fields[23],"0x%02x",eregs->ADO2AF);
 	outf(&__SensorData_fields[24],"%6s",xtoS((eregs->ADO2AF*444),100,buf1,sizeof(buf1)));
 	outf(&__SensorData_fields[26],"0x%02x",eregs->MAT);
-	outf(&__SensorData_fields[27],"%6s",xtoS((eregs->MAT*135)-4000,100,buf1,sizeof(buf1)));
-	outf(&__SensorData_fields[28],"%6s",xtoS((eregs->MAT*75)-4000,100,buf1,sizeof(buf1)));
+	outf(&__SensorData_fields[27],"%6s",xtoS(c_to_f(cval(eregs->MAT)),1,buf1,sizeof(buf1)));
+	outf(&__SensorData_fields[28],"%6s",xtoS(cval(eregs->MAT),1,buf1,sizeof(buf1)));
 	outf(&__SensorData_fields[30],"0x%02x",eregs->BLM);
 	outf(&__SensorData_fields[31],"%3d",eregs->BLM);
 	outf(&__SensorData_fields[33],"0x%02x",eregs->ALDLCNTR);
 	outf(&__SensorData_fields[34],"%3d",eregs->ALDLCNTR);
 	outf(&__SensorData_fields[36],"0x%02x",eregs->DISPFLOW);
-	outf(&__SensorData_fields[37],"%4d",(eregs->DISPFLOW*256)+eregs->DISPFLOW1);
+	outf(&__SensorData_fields[37],"%3d.%02d",eregs->DISPFLOW,((eregs->DISPFLOW1*39)/100));
 	return 0;
 }
 
