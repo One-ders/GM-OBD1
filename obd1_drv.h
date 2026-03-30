@@ -31,3 +31,5 @@
  * @(#)obd160_drv.h
  */
 #define OBD_DRV0	"obd160_drv0"
+
+#define OBD1_LINK_RST	1000

@@ -96,34 +96,47 @@ static struct obd_data obdd;
 
 static unsigned char mode10_packet[]={ 0x80, 0x56, 0x01, 0x29 };
 
-static int send_req=0;
+static int t_mode=0;
+static char *rst_str="### LINK RESET###\n\r";
+
 static int handle_timeout(int dumfd, int dumevent, void *uref) {
 	if (obdd.mode==MODE_8192B) {
-		if (send_req) {
 			int rc;
-			send_req=0;
+			if (t_mode) {
+				io_control(obdd.fd_obd, OBD1_LINK_RST, 0,0);
+				io_control(obdd.fd_serial, F_SETFL, (void*)0, 0);
+				io_write(obdd.fd_serial, rst_str, strlen(rst_str));
+				io_control(obdd.fd_serial, F_SETFL, (void*)O_NONBLOCK, 0);
+			}
 			rc=io_write(obdd.fd_obd, mode10_packet, sizeof(mode10_packet));
 			if (rc!=sizeof(mode10_packet)) {
-				printf("failed to send mode10_packet\n");
+				printf("%t: failed to send mode10_packet\n");
 			}
-		}
+//			printf("%t: handle_timeout: write mode10 packet returned %d\n", rc);
+			t_mode=1;
+			register_timer(500,handle_timeout,0);
+//		}
 	}
 	return 0;
 }
 
 static int send_mode1_req() {
 	if (obdd.mode==MODE_8192B) {
-		send_req=0;
-		io_write(obdd.fd_obd, mode10_packet, sizeof(mode10_packet));
+		int rc;
+		rc=io_write(obdd.fd_obd, mode10_packet, sizeof(mode10_packet));
+//		printf("%t: write mode10_packet returned %d\n", rc);
+		t_mode=1;
+		register_timer(500,handle_timeout,0);
 	}
 	return 0;
 }
 
 static int send_request(int argc, char **argv, struct Env *env) {
-	send_req=1;
+	send_mode1_req();
 	return 0;
 }
 
+#if 0
 static void dump_bytes(int fd, void *buf, int size) {
         int i;
         char asc[32];
@@ -152,6 +165,7 @@ static void dump_bytes(int fd, void *buf, int size) {
         }
         printf("=========================================================\n");
 }
+#endif
 
 static int handle_obd8192_data(int fd, int event, void *uref);
 
@@ -217,7 +231,10 @@ static int handle_obd8192_data(int fd, int event, void *uref) {
 	int rc;
 
 	rc=io_read(fd,buf,sizeof(buf));
-	printf("%t: mode=obd8192: read returned %d bytes\n",rc);
+	if (rc<0) {
+		return 0;
+	}
+//	printf("%t: mode=obd8192: read returned %d bytes\n",rc);
 	dlen=rc;
 //	dump_data8192(buf);
 	if (obdd.fd_serial) {
@@ -239,7 +256,8 @@ static int handle_obd8192_data(int fd, int event, void *uref) {
 		if (rc<0) {
 			printf("failed to write obd data to serial\n");
 		}
-		send_req=1;
+		t_mode=0;
+		register_timer(10,handle_timeout,0);
 	}
 	return 0;
 }
@@ -247,6 +265,7 @@ static int handle_obd8192_data(int fd, int event, void *uref) {
 
 //==============================================================================
 
+#if 0
 static void dump_data160(const char *buf) {
 
 	char *dm;
@@ -296,6 +315,7 @@ static void dump_data160(const char *buf) {
 	printf("DISPFLOW: %d,%d\n", buf[21], (buf[22]*100)>>8);
 	printf("Injector pulse %d.%d ms\n", buf[23], buf[24]);
 }
+#endif
 
 static int handle_obd160_data(int fd, int event, void *uref) {
 	char buf[32];
@@ -308,7 +328,7 @@ static int handle_obd160_data(int fd, int event, void *uref) {
 		return 0;
 	}
 	rc=io_read(fd,buf,sizeof(buf));
-	printf("mode=obd_160, read returned %d bytes\n",rc);
+//	printf("mode=obd_160, read returned %d bytes\n",rc);
 	dlen=rc;
 //	dump_data160(buf);
 
@@ -399,7 +419,7 @@ static void obd_gw_io(void *dum) {
 		register_event(fd_obd, EV_READ, handle_obd8192_data, &obdd);
 	}
 
-	register_timer(500, handle_timeout, 0);
+//	register_timer(500, handle_timeout, 0);
 
 	printf("obd_gw_io: leaving\n");
 	endit=0;

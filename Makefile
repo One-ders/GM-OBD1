@@ -1,7 +1,8 @@
 
 #KREL=../../krel
 #KREL=../RTScheduler-Discovery/boards/MB997C
-KREL=../RTScheduler-Discovery/boards/BLACKPILL
+#KREL=../RTScheduler-Discovery/boards/BLACKPILL
+KREL=../lpScheduler/boards/BLACKPILL
 
 ## application brings own driver, specify the make target in the
 ## macro below. The make file is expected to create a object file

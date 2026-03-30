@@ -1,0 +1,3 @@
+[submodule "RTScheduler-Discovery"]
+	path = RTScheduler-Discovery
+	url = https://github.com/One-ders/RTScheduler-Discovery.git

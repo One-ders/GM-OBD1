@@ -63,7 +63,7 @@ unsigned int red=LED_RED;
 unsigned int blue=LED_BLUE;
 #endif
 
-static int interframe_space=0;
+static int interframe_space=1;
 
 #define OBD160_STATE_IDLE	0
 
@@ -235,7 +235,7 @@ static int pin_irq(struct device_handle *dh, int ev, void *dum) {
 			if (obd->bnum==25) {
 				obd->bnum=0;
 				if (left>0) {
-					sys_printf("interframe spacing %d uS\n", 1000000-left);
+//					sys_printf("interframe spacing %d uS\n", 1000000-left);
 				} else {
 					sys_printf("missing interframe space flag on new frame start\n");
 				}
@@ -255,7 +255,7 @@ static int pin_irq(struct device_handle *dh, int ev, void *dum) {
 				obd->b1cnt++;
 
 				if (obd->b1cnt==9) {
-					sys_printf("got synch\n");
+//					sys_printf("got synch\n");
 					obd->byte=0;
 					obd->bcnt=0;
 					obd->bnum=0;
@@ -500,13 +500,19 @@ static struct device_handle *obd8192_drv_open(void *inst, DRV_CBH cb, void *udat
 
 static int obd8192_drv_close(struct device_handle *dh) {
 	struct user_data8192 *u=(struct user_data8192 *)dh;
+	struct obd8192_data *od;
 	if (!u) {
 		return 0;
 	}
+	od=u->obd8192_data;
 	if (u) {
 		u->in_use=0;
 		u->obd8192_data=0;
 	}
+	od->rx_bstate=RX_IDLE;
+	od->rx_bcnt=0;
+	od->rx_len=2;
+	obd_comm_speed=160;
 	return 0;
 }
 
@@ -523,6 +529,7 @@ static int obd8192_drv_control(struct device_handle *dh, int cmd, void *arg, int
 		case RD_CHAR: {
 			int len;
 			unsigned char *buf=(unsigned char *)arg;
+
 			if (!(od->rx_i-od->rx_o)) {
 				u->events|=EV_READ;
 				return -DRV_AGAIN;
@@ -570,6 +577,13 @@ again:
 				}
 			}
 			return revents;
+			break;
+		}
+		case OBD1_LINK_RST: {
+			od->rx_bstate=RX_IDLE;
+			od->rx_bcnt=0;
+			od->rx_len=2;
+			return 0;
 			break;
 		}
 	}

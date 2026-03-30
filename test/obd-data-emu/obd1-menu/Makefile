@@ -32,4 +32,5 @@ panellib/panel.o: panellib/panel.c
 
 
 clean:
-	rm -rf  obd1 *.tpl menu.c menu.h *.o obj panellib
+	rm -rf  obd1 *.tpl *.o obj panellib
+#	rm -rf  obd1 *.tpl menu.c menu.h *.o obj panellib
